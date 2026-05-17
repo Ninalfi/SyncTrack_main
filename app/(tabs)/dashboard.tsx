@@ -160,14 +160,14 @@ export default function Dashboard() {
         </Text>
 
         <Text style={styles.heroTitle}>
-          Dashboard Overview
+          Dashboard
         </Text>
 
         <Text
           style={styles.heroSubtitle}
         >
-          Monitor student project
-          progress in real-time.
+          Monitor project progress and
+          recent student activities.
         </Text>
       </View>
 
@@ -188,145 +188,220 @@ export default function Dashboard() {
         />
       </View>
 
-      <Text style={styles.section}>
-        Active Projects
-      </Text>
+      <View style={styles.dashboardRow}>
+        {/* LEFT PANEL */}
 
-      {projects.map(
-        (project, index) => {
-          const status =
-            getStatus(
-              project.progress
-            );
-
-          return (
-            <View
-              key={index}
-              style={
-                styles.projectCard
-              }
+        <View style={styles.leftPanel}>
+          <View
+            style={styles.panelHeader}
+          >
+            <Text
+              style={styles.panelTitle}
             >
-              <View
-                style={
-                  styles.projectHeader
-                }
-              >
-                <Text
+              Projects Overview
+            </Text>
+          </View>
+
+          {projects.map(
+            (project, index) => {
+              const status =
+                getStatus(
+                  project.progress
+                );
+
+              return (
+                <TouchableOpacity
+                  key={index}
                   style={
-                    styles.projectTitle
+                    styles.projectRow
+                  }
+                  onPress={() =>
+                    router.push(
+                      `/project/${index}`
+                    )
                   }
                 >
-                  {
-                    project.projectTitle
-                  }
-                </Text>
+                  <View
+                    style={
+                      styles.projectInfo
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.projectTitle
+                      }
+                    >
+                      {
+                        project.projectTitle
+                      }
+                    </Text>
 
-                <Text
-                  style={
-                    styles.progressPercent
-                  }
-                >
-                  {
-                    project.progress
-                  }
-                  %
-                </Text>
-              </View>
+                    <Text
+                      style={
+                        styles.projectSub
+                      }
+                    >
+                      {
+                        project.courseName
+                      }
+                    </Text>
+                  </View>
 
+                  <View
+                    style={
+                      styles.progressContainer
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.progressPercent
+                      }
+                    >
+                      {
+                        project.progress
+                      }
+                      %
+                    </Text>
+
+                    <View
+                      style={
+                        styles.progressBg
+                      }
+                    >
+                      <View
+                        style={[
+                          styles.progressFill,
+
+                          {
+                            width: `${project.progress}%`,
+                          },
+
+                          status ===
+                            "On Track" &&
+                            styles.progressGood,
+
+                          status ===
+                            "Attention" &&
+                            styles.progressDanger,
+                        ]}
+                      />
+                    </View>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.statusBadge,
+
+                      status ===
+                        "On Track" &&
+                        styles.badgeGood,
+
+                      status ===
+                        "Attention" &&
+                        styles.badgeDanger,
+                    ]}
+                  >
+                    <Text
+                      style={
+                        styles.badgeText
+                      }
+                    >
+                      {status}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            }
+          )}
+        </View>
+
+        {/* RIGHT PANEL */}
+
+        <View style={styles.rightPanel}>
+          <View
+            style={styles.panelHeader}
+          >
+            <Text
+              style={styles.panelTitle}
+            >
+              Recent Activity
+            </Text>
+          </View>
+
+          {projects.map(
+            (project, index) => (
               <View
+                key={index}
                 style={
-                  styles.progressBg
+                  styles.activityCard
                 }
               >
                 <View
-                  style={[
-                    styles.progressFill,
-
-                    {
-                      width: `${project.progress}%`,
-                    },
-
-                    status ===
-                      "On Track" &&
-                      styles.progressGood,
-
-                    status ===
-                      "Attention" &&
-                      styles.progressDanger,
-                  ]}
+                  style={
+                    styles.activityDot
+                  }
                 />
+
+                <View
+                  style={
+                    styles.activityContent
+                  }
+                >
+                  <Text
+                    style={
+                      styles.activityText
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.activityName
+                      }
+                    >
+                      {
+                        project.studentName
+                      }
+                    </Text>{" "}
+                    submitted an update
+                    for{" "}
+                    <Text
+                      style={
+                        styles.activityProject
+                      }
+                    >
+                      {
+                        project.projectTitle
+                      }
+                    </Text>
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.activityUpdate
+                    }
+                  >
+                    {
+                      project.updateDetails
+                    }
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.activityTime
+                    }
+                  >
+                    {
+                      project.timestamp
+                    }
+                  </Text>
+                </View>
               </View>
-
-              <View
-                style={
-                  styles.projectFooter
-                }
-              >
-                <Text
-                  style={
-                    styles.tag
-                  }
-                >
-                  {
-                    project.courseName
-                  }
-                </Text>
-
-                <Text
-                  style={
-                    styles.week
-                  }
-                >
-                  Week{" "}
-                  {
-                    project.weekNumber
-                  }
-                </Text>
-              </View>
-
-              <Text
-                style={[
-                  styles.status,
-
-                  status ===
-                    "On Track" &&
-                    styles.statusGood,
-
-                  status ===
-                    "Attention" &&
-                    styles.statusDanger,
-                ]}
-              >
-                {status}
-              </Text>
-
-              <TouchableOpacity
-                style={
-                  styles.detailsButton
-                }
-                onPress={() =>
-                  router.push(
-                    `/project/${index}`
-                  )
-                }
-              >
-                <Text
-                  style={
-                    styles.detailsText
-                  }
-                >
-                  See Details
-                </Text>
-              </TouchableOpacity>
-            </View>
-          );
-        }
-      )}
+            )
+          )}
+        </View>
+      </View>
 
       <View
-        style={{
-          height: 100,
-        }}
+        style={{ height: 80 }}
       />
     </ScrollView>
   );
@@ -424,47 +499,82 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  section: {
-    color: "white",
-    fontSize: 24,
-    fontWeight: "900",
-    marginBottom: 18,
+  dashboardRow: {
+    flexDirection: "row",
+    gap: 18,
+    alignItems: "flex-start",
   },
 
-  projectCard: {
+  leftPanel: {
+    flex: 1.2,
     backgroundColor: "#111827",
-    borderRadius: 22,
+    borderRadius: 24,
     padding: 18,
-    marginBottom: 16,
     borderWidth: 1,
     borderColor: "#1E293B",
   },
 
-  projectHeader: {
+  rightPanel: {
+    flex: 1,
+    backgroundColor: "#111827",
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#1E293B",
+  },
+
+  panelHeader: {
+    marginBottom: 18,
+  },
+
+  panelTitle: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "900",
+  },
+
+  projectRow: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent:
       "space-between",
-    alignItems: "center",
+    backgroundColor: "#0B1120",
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 14,
+  },
+
+  projectInfo: {
+    flex: 1,
   },
 
   projectTitle: {
     color: "white",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "900",
-    flex: 1,
+  },
+
+  projectSub: {
+    color: "#94A3B8",
+    marginTop: 4,
+    fontSize: 12,
+  },
+
+  progressContainer: {
+    width: 140,
+    marginHorizontal: 18,
   },
 
   progressPercent: {
     color: "#60A5FA",
-    fontWeight: "900",
-    fontSize: 16,
+    marginBottom: 6,
+    fontWeight: "800",
   },
 
   progressBg: {
-    height: 10,
+    height: 8,
     backgroundColor: "#1E293B",
     borderRadius: 20,
-    marginTop: 16,
     overflow: "hidden",
   },
 
@@ -482,51 +592,68 @@ const styles = StyleSheet.create({
     backgroundColor: "#EF4444",
   },
 
-  projectFooter: {
-    flexDirection: "row",
-    justifyContent:
-      "space-between",
-    marginTop: 16,
+  statusBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "#3F3F46",
   },
 
-  tag: {
-    color: "#E2E8F0",
-    backgroundColor: "#1E293B",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    fontSize: 12,
-    overflow: "hidden",
+  badgeGood: {
+    backgroundColor: "#14532D",
   },
 
-  week: {
-    color: "#94A3B8",
+  badgeDanger: {
+    backgroundColor: "#7F1D1D",
   },
 
-  status: {
-    marginTop: 12,
-    fontWeight: "900",
-    color: "#F59E0B",
-  },
-
-  statusGood: {
-    color: "#22C55E",
-  },
-
-  statusDanger: {
-    color: "#EF4444",
-  },
-
-  detailsButton: {
-    backgroundColor: "#2563EB",
-    marginTop: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
-  },
-
-  detailsText: {
+  badgeText: {
     color: "white",
-    textAlign: "center",
-    fontWeight: "900",
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  activityCard: {
+    flexDirection: "row",
+    marginBottom: 20,
+  },
+
+  activityDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 20,
+    backgroundColor: "#2563EB",
+    marginTop: 8,
+    marginRight: 12,
+  },
+
+  activityContent: {
+    flex: 1,
+  },
+
+  activityText: {
+    color: "#E2E8F0",
+    lineHeight: 22,
+  },
+
+  activityName: {
+    color: "white",
+    fontWeight: "bold",
+  },
+
+  activityProject: {
+    color: "#60A5FA",
+    fontWeight: "bold",
+  },
+
+  activityUpdate: {
+    color: "#CBD5E1",
+    marginTop: 6,
+  },
+
+  activityTime: {
+    color: "#64748B",
+    marginTop: 6,
+    fontSize: 12,
   },
 });
