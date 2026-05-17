@@ -7,22 +7,40 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
+  Linking,
 } from "react-native";
 
 import { router } from "expo-router";
 
 const API_URL =
-  "https://sheetdb.io/api/v1/h8unfu037masy";
+  "https://sheetdb.io/api/v1/sif1s2zbyslya";
 
 interface Project {
   timestamp: string;
+
   studentId: string;
+
   studentName: string;
+
+  teamMembers: string;
+
   projectTitle: string;
+
   courseName: string;
+
   weekNumber: string;
+
   progress: number;
+
   updateDetails: string;
+
+  github: string;
+
+  drive: string;
+
+  figma: string;
+
+  demo: string;
 }
 
 export default function Dashboard() {
@@ -50,35 +68,53 @@ export default function Dashboard() {
             item.Timestamp || "",
 
           studentId:
-            item["Student ID "] ||
-            "",
+            item["Student ID"] || "",
 
           studentName:
-            item["Student Name  "] ||
-            "",
+            item["Student Name"] || "",
+
+          teamMembers:
+            item["Team Members"] || "",
 
           projectTitle:
-            item["Project Title  "] ||
+            item["Project Title"] ||
             "Untitled Project",
 
           courseName:
-            item["Course Name  "] ||
-            "",
+            item["Course Name"] || "",
 
           weekNumber:
-            item["Week Number  "] ||
-            "",
+            item["Week Number"] || "",
 
           progress: parseInt(
             item[
-              "Progress  "
+              "Current Progress"
             ]?.replace("%", "") ||
               "0"
           ),
 
           updateDetails:
+            item["Update Details"] ||
+            "",
+
+          github:
             item[
-              "Update Details  "
+              "GitHub Repository "
+            ] || "",
+
+          drive:
+            item[
+              "Google Drive Link"
+            ] || "",
+
+          figma:
+            item[
+              "Figma Design Link"
+            ] || "",
+
+          demo:
+            item[
+              "Demo Video Link"
             ] || "",
         }));
 
@@ -166,8 +202,9 @@ export default function Dashboard() {
         <Text
           style={styles.heroSubtitle}
         >
-          Monitor project progress and
-          recent student activities.
+          Monitor project progress,
+          teams, and recent
+          activities.
         </Text>
       </View>
 
@@ -243,6 +280,17 @@ export default function Dashboard() {
                     >
                       {
                         project.courseName
+                      }
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.teamText
+                      }
+                    >
+                      👥{" "}
+                      {
+                        project.teamMembers
                       }
                     </Text>
                   </View>
@@ -361,8 +409,7 @@ export default function Dashboard() {
                         project.studentName
                       }
                     </Text>{" "}
-                    submitted an update
-                    for{" "}
+                    updated{" "}
                     <Text
                       style={
                         styles.activityProject
@@ -393,6 +440,88 @@ export default function Dashboard() {
                       project.timestamp
                     }
                   </Text>
+
+                  <View
+                    style={
+                      styles.linkRow
+                    }
+                  >
+                    {project.github !==
+                      "" && (
+                      <TouchableOpacity
+                        onPress={() =>
+                          Linking.openURL(
+                            project.github
+                          )
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.linkText
+                          }
+                        >
+                          GitHub
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {project.drive !==
+                      "" && (
+                      <TouchableOpacity
+                        onPress={() =>
+                          Linking.openURL(
+                            project.drive
+                          )
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.linkText
+                          }
+                        >
+                          Drive
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {project.figma !==
+                      "" && (
+                      <TouchableOpacity
+                        onPress={() =>
+                          Linking.openURL(
+                            project.figma
+                          )
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.linkText
+                          }
+                        >
+                          Figma
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {project.demo !==
+                      "" && (
+                      <TouchableOpacity
+                        onPress={() =>
+                          Linking.openURL(
+                            project.demo
+                          )
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.linkText
+                          }
+                        >
+                          Demo
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               </View>
             )
@@ -560,6 +689,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
+  teamText: {
+    color: "#CBD5E1",
+    marginTop: 8,
+    fontSize: 12,
+  },
+
   progressContainer: {
     width: 140,
     marginHorizontal: 18,
@@ -655,5 +790,17 @@ const styles = StyleSheet.create({
     color: "#64748B",
     marginTop: 6,
     fontSize: 12,
+  },
+
+  linkRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 12,
+  },
+
+  linkText: {
+    color: "#60A5FA",
+    fontWeight: "700",
   },
 });

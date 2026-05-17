@@ -46,15 +46,25 @@ export type Project = {
 
   studentName: string;
 
+  teamMembers: string;
+
   updateDetails: string;
 
   timestamp: string;
 
   weekNumber: string;
+
+  github: string;
+
+  drive: string;
+
+  figma: string;
+
+  demo: string;
 };
 
 const API_URL =
-  "https://sheetdb.io/api/v1/h8unfu037masy";
+  "https://sheetdb.io/api/v1/sif1s2zbyslya";
 
 export async function fetchProjects(): Promise<Project[]> {
   try {
@@ -65,21 +75,25 @@ export async function fetchProjects(): Promise<Project[]> {
     return data.map(
       (item: any, index: number) => {
         const progress = parseInt(
-          item["Progress  "].replace("%", "")
+          item[
+            "Current Progress"
+          ]?.replace("%", "") ||
+            "0"
         );
 
         return {
           id: String(index + 1),
 
           title:
-            item["Project Title  "] ||
+            item["Project Title"] ||
             "Untitled Project",
 
           subject:
-            item["Course Name  "] ||
+            item["Course Name"] ||
             "Unknown Subject",
 
-          category: "Project Tracking",
+          category:
+            "Project Tracking",
 
           dueDate: "2026-06-01",
 
@@ -93,7 +107,7 @@ export async function fetchProjects(): Promise<Project[]> {
               : "High",
 
           description:
-            item["Update Details  "] ||
+            item["Update Details"] ||
             "No description available.",
 
           professor: "Layek Sir",
@@ -112,42 +126,74 @@ export async function fetchProjects(): Promise<Project[]> {
               : 1,
 
           studentName:
-            item["Student Name  "] ||
+            item["Student Name"] ||
             "Unknown Student",
 
+          teamMembers:
+            item["Team Members"] ||
+            "",
+
           updateDetails:
-            item["Update Details  "] ||
+            item["Update Details"] ||
             "",
 
           timestamp:
             item.Timestamp || "",
 
           weekNumber:
-            item["Week Number  "] || "",
+            item["Week Number"] ||
+            "",
+
+          github:
+            item[
+              "GitHub Repository "
+            ] || "",
+
+          drive:
+            item[
+              "Google Drive Link"
+            ] || "",
+
+          figma:
+            item[
+              "Figma Design Link"
+            ] || "",
+
+          demo:
+            item[
+              "Demo Video Link"
+            ] || "",
 
           tasks: [
             {
               id: `${index}-1`,
-              title: "Project Planning",
+              title:
+                "Project Planning",
               completed: true,
             },
 
             {
               id: `${index}-2`,
-              title: "Dashboard UI",
-              completed: progress >= 50,
+              title:
+                "Dashboard UI",
+              completed:
+                progress >= 50,
             },
 
             {
               id: `${index}-3`,
-              title: "Backend Integration",
-              completed: progress >= 75,
+              title:
+                "Backend Integration",
+              completed:
+                progress >= 75,
             },
 
             {
               id: `${index}-4`,
-              title: "Final Submission",
-              completed: progress >= 100,
+              title:
+                "Final Submission",
+              completed:
+                progress >= 100,
             },
           ],
         };
