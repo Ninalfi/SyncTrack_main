@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useAuth } from "../context/AuthContext";
 import {
   View,
   Text,
@@ -14,7 +13,7 @@ import {
   signInWithEmailAndPassword,
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { auth, db } from "../services/firebase";
+import { auth, db } from "../services/firebaseConfig";
 
 type UserRole = "student" | "professor";
 
@@ -24,8 +23,6 @@ export default function AuthScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("student");
-
-  const { login } = useAuth();
 
   async function handleAuth() {
     if (!email || !password || (!isLogin && !name)) {
@@ -40,33 +37,12 @@ export default function AuthScreen() {
         const userRef = doc(db, "users", result.user.uid);
         const userSnap = await getDoc(userRef);
 
-if (!userSnap.exists()) {
-  await setDoc(doc(db, "users", result.user.uid), {
-    name: result.user.email?.split("@")[0] || "User",
-    email: result.user.email,
-    role: "student",
-    createdAt: new Date().toISOString(),
-  });
-
-  await login({
-    uid: result.user.uid,
-    email: result.user.email,
-    name: result.user.email?.split("@")[0] || "User",
-    role: "student",
-  });
-
-  router.replace("/(tabs)");
-  return;
-}
+        if (!userSnap.exists()) {
+          Alert.alert("Error", "User role not found");
+          return;
+        }
 
         const userData = userSnap.data();
-
-        await login({
-          uid: result.user.uid,
-          email: result.user.email,
-          name: userData.name,
-          role: userData.role,
-        });
 
         if (userData.role === "professor") {
           router.replace("/(tabs)/dashboard");
@@ -87,13 +63,6 @@ if (!userSnap.exists()) {
           createdAt: new Date().toISOString(),
         });
 
-        await login({
-          uid: result.user.uid,
-          email,
-          name,
-          role,
-        });
-
         if (role === "professor") {
           router.replace("/(tabs)/dashboard");
         } else {
@@ -101,9 +70,7 @@ if (!userSnap.exists()) {
         }
       }
     } catch (error: any) {
-      console.log("Firebase error code:", error.code);
-console.log("Firebase error message:", error.message);
-Alert.alert("Authentication failed", error.message);
+      Alert.alert("Authentication failed", error.message);
     }
   }
 
