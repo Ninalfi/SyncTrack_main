@@ -41,21 +41,10 @@ export default function AuthScreen() {
         const userSnap = await getDoc(userRef);
 
 if (!userSnap.exists()) {
-  await setDoc(doc(db, "users", result.user.uid), {
-    name: result.user.email?.split("@")[0] || "User",
-    email: result.user.email,
-    role: "student",
-    createdAt: new Date().toISOString(),
-  });
-
-  await login({
-    uid: result.user.uid,
-    email: result.user.email,
-    name: result.user.email?.split("@")[0] || "User",
-    role: "student",
-  });
-
-  router.replace("/(tabs)");
+  Alert.alert(
+    "User profile missing",
+    "Your account exists, but your role profile was not found. Please sign up again or create the user role in Firestore."
+  );
   return;
 }
 

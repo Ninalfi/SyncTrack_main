@@ -1,119 +1,117 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ScrollView,
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
   ActivityIndicator,
+  Linking,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  fetchProjects,
-  getProjectStatus,
-  Project,
-} from "../../data/projects";
+import { router } from "expo-router";
+import { useAuth } from "../../context/AuthContext";
+import { fetchProjects, getProjectStatus, Project } from "../../data/projects";
 
-type FilterType =
-  | "All"
-  | "Completed"
-  | "On Track"
-  | "Review"
-  | "Attention";
+const GOOGLE_FORM_URL = "PASTE_YOUR_GOOGLE_FORM_LINK_HERE";
+
+type ProjectWithStatus = Project & {
+  status: "Completed" | "On Track" | "Review" | "Attention";
+};
+
+function getGreeting() {
+  const hour = new Date().getHours();
+
+  if (hour < 12) return "Good Morning ☀️";
+  if (hour < 17) return "Good Afternoon 🌤️";
+  if (hour < 21) return "Good Evening 🌙";
+  return "Good Night 🌌";
+}
+
+function getDaysLeft(date: string) {
+  const today = new Date();
+  const due = new Date(date);
+  const diff = due.getTime() - today.getTime();
+
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
 
 export default function HomeScreen() {
+  const { user } = useAuth();
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchText, setSearchText] = useState("");
-  const [activeFilter, setActiveFilter] =
-    useState<FilterType>("All");
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadProjects();
-  }, []);
+  const userName = user?.name || user?.email?.split("@")[0] || "Student";
+  const isProfessor = user?.role === "professor";
 
   async function loadProjects() {
     try {
       const data = await fetchProjects();
       setProjects(data);
     } catch (error) {
-      console.log(error);
+      console.log("Home fetch error:", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
-  const enhancedProjects = useMemo(() => {
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  const enhancedProjects: ProjectWithStatus[] = useMemo(() => {
     return projects.map((project) => ({
       ...project,
       status: getProjectStatus(project.progress),
     }));
   }, [projects]);
 
-  const filteredProjects = useMemo(() => {
-    return enhancedProjects.filter((project) => {
-      const search = searchText.toLowerCase();
-
-      const matchesSearch =
-        project.title.toLowerCase().includes(search) ||
-        project.subject.toLowerCase().includes(search) ||
-        project.professor.toLowerCase().includes(search);
-
-      const matchesFilter =
-        activeFilter === "All" ||
-        project.status === activeFilter;
-
-      return matchesSearch && matchesFilter;
-    });
-  }, [enhancedProjects, searchText, activeFilter]);
-
   const totalProjects = enhancedProjects.length;
 
-  const completedProjects =
-    enhancedProjects.filter(
-      (p) => p.status === "Completed"
-    ).length;
+  const completedProjects = enhancedProjects.filter(
+    (project) => project.status === "Completed"
+  ).length;
+
+  const attentionProjects = enhancedProjects.filter(
+    (project) => project.status === "Attention"
+  ).length;
 
   const averageProgress =
-    enhancedProjects.length > 0
+    totalProjects > 0
       ? Math.round(
           enhancedProjects.reduce(
-            (sum, project) =>
-              sum + project.progress,
+            (sum, project) => sum + project.progress,
             0
-          ) / enhancedProjects.length
+          ) / totalProjects
         )
       : 0;
 
-  const upcomingProject =
-    enhancedProjects.length > 0
-      ? [...enhancedProjects].sort(
-          (a, b) =>
-            new Date(a.dueDate).getTime() -
-            new Date(b.dueDate).getTime()
-        )[0]
-      : null;
+  const focusProject = enhancedProjects[0];
 
-  const filters: FilterType[] = [
-    "All",
-    "Completed",
-    "On Track",
-    "Review",
-    "Attention",
-  ];
+  const upcomingDeadlines = [...enhancedProjects]
+    .sort(
+      (a, b) =>
+        new Date(a.dueDate).getTime() -
+        new Date(b.dueDate).getTime()
+    )
+    .slice(0, 3);
+
+  const initials = userName
+    .split(" ")
+    .map((name) => name[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator
-          size="large"
-          color="#2563EB"
-        />
-        <Text style={styles.loadingText}>
-          Loading projects...
-        </Text>
+        <ActivityIndicator size="large" color="#60A5FA" />
+        <Text style={styles.loadingText}>Loading SyncTrack...</Text>
       </View>
     );
   }
@@ -122,693 +120,678 @@ export default function HomeScreen() {
     <ScrollView
       style={styles.container}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            loadProjects();
+          }}
+          tintColor="#60A5FA"
+        />
+      }
     >
-      {/* HEADER */}
-      <View style={styles.topBar}>
+      <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>
-            Good Morning 👋
-          </Text>
-          <Text style={styles.logo}>
-            SyncTrack
+          <Text style={styles.greeting}>{getGreeting()}</Text>
+          <Text style={styles.name}>{userName}</Text>
+          <Text style={styles.role}>
+            {isProfessor ? "Professor Workspace" : "CSE Student"}
           </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.profileCircle}
-        >
-          <Text style={styles.profileText}>
-            S
-          </Text>
+        <TouchableOpacity style={styles.avatar}>
+          <Text style={styles.avatarText}>{initials}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* HERO */}
-      <View style={styles.hero}>
-        <View style={styles.heroIcon}>
-          <Ionicons
-            name="school-outline"
-            size={28}
-            color="#FFFFFF"
+      <View style={styles.overviewCard}>
+        <View style={styles.overviewTop}>
+          <Text style={styles.overviewTitle}>Overall Progress</Text>
+        </View>
+
+        <Text style={styles.overviewPercent}>{averageProgress}%</Text>
+
+        <View style={styles.overviewProgressBg}>
+          <View
+            style={[
+              styles.overviewProgressFill,
+              { width: `${averageProgress}%` },
+            ]}
           />
         </View>
 
-        <Text style={styles.title}>
-          Manage Academic Projects Smarter
-        </Text>
-
-        <Text style={styles.subtitle}>
-          Track student progress,
-          monitor deadlines, and review
-          submissions through one
-          professional workspace.
+        <Text style={styles.overviewStats}>
+          {totalProjects} Projects • {completedProjects} Completed •{" "}
+          {attentionProjects} Alerts
         </Text>
 
         <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() =>
-            router.push("/(tabs)/dashboard")
-          }
-        >
-          <Text
-            style={styles.primaryButtonText}
-          >
-            Open Dashboard
-          </Text>
+  style={styles.dashboardButton}
+  onPress={() => router.push("/(tabs)/dashboard")}
+>
+  <Text style={styles.dashboardButtonText}>
+    Open Dashboard
+  </Text>
 
-          <Ionicons
-            name="arrow-forward-outline"
-            size={18}
-            color="#FFFFFF"
-          />
-        </TouchableOpacity>
+  <Ionicons
+    name="arrow-forward-outline"
+    size={18}
+    color="#FFFFFF"
+  />
+</TouchableOpacity>
       </View>
 
-      {/* STATS */}
-      <View style={styles.statsRow}>
-        <StatCard
-          icon="folder-open-outline"
-          value={totalProjects}
-          label="Projects"
-          color="#60A5FA"
+      <View style={styles.focusCard}>
+        <View style={styles.focusTop}>
+          <View style={styles.focusIcon}>
+            <Ionicons name="rocket-outline" size={28} color="#FFFFFF" />
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={styles.focusLabel}>Today’s Focus</Text>
+            <Text style={styles.focusTitle}>
+              {focusProject?.title || "No active project"}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.focusText}>
+          {focusProject
+            ? `${focusProject.subject} • ${focusProject.progress}% complete • Due ${focusProject.dueDate}`
+            : "Once projects are loaded, your main focus will appear here."}
+        </Text>
+
+        {focusProject && (
+          <>
+            <View style={styles.focusProgressBg}>
+              <View
+                style={[
+                  styles.focusProgressFill,
+                  { width: `${focusProject.progress}%` },
+                ]}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={styles.continueButton}
+              onPress={() => router.push(`/project/${focusProject.id}`)}
+            >
+              <Text style={styles.continueText}>Continue Project</Text>
+              <Ionicons
+                name="arrow-forward-outline"
+                size={18}
+                color="#FFFFFF"
+              />
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+
+      <View style={styles.quickGrid}>
+        <QuickCard
+          icon="sparkles-outline"
+          title="AI"
+          color="#7C3AED"
+          onPress={() => router.push("/ai")}
         />
 
-        <StatCard
+        <QuickCard
+          icon="chatbubble-ellipses-outline"
+          title="Chat"
+          color="#22C55E"
+          onPress={() => router.push("/(tabs)/explore")}
+        />
+
+        <QuickCard
+          icon="library-outline"
+          title="Docs"
+          color="#F59E0B"
+          onPress={() => router.push("/(tabs)/explore")}
+        />
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Upcoming Deadlines</Text>
+
+        <TouchableOpacity onPress={() => router.push("/(tabs)/dashboard")}>
+          <Text style={styles.sectionLink}>View all →</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.deadlineCard}>
+        {upcomingDeadlines.length === 0 ? (
+          <Text style={styles.emptyText}>No deadlines available.</Text>
+        ) : (
+          upcomingDeadlines.map((project) => {
+            const daysLeft = getDaysLeft(project.dueDate);
+
+            return (
+              <TouchableOpacity
+                key={project.id}
+                style={styles.deadlineItem}
+                onPress={() => router.push(`/project/${project.id}`)}
+              >
+                <View
+                  style={[
+                    styles.deadlineDot,
+                    daysLeft <= 3 && styles.deadlineDotDanger,
+                  ]}
+                />
+
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.deadlineTitle}>{project.title}</Text>
+                  <Text style={styles.deadlineMeta}>
+                    {project.subject} • Due {project.dueDate}
+                  </Text>
+                </View>
+
+                <Text
+                  style={[
+                    styles.daysBadge,
+                    daysLeft <= 3 && styles.daysBadgeDanger,
+                  ]}
+                >
+                  {daysLeft > 0 ? `${daysLeft}d` : "Due"}
+                </Text>
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </View>
+
+      <View style={styles.aiBanner}>
+        <View style={styles.aiTop}>
+          <Ionicons name="sparkles-outline" size={28} color="#DBEAFE" />
+          <Text style={styles.aiTitle}>Need help today?</Text>
+        </View>
+
+        <Text style={styles.aiText}>
+          Generate weekly updates, project summaries, coding explanations, or
+          presentation notes with SyncTrack AI.
+        </Text>
+
+        <TouchableOpacity
+          style={styles.aiButton}
+          onPress={() => router.push("/ai")}
+        >
+          <Text style={styles.aiButtonText}>Open AI Assistant</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Recent Activity</Text>
+      </View>
+
+      <View style={styles.activityCard}>
+        <ActivityItem
           icon="checkmark-circle-outline"
-          value={completedProjects}
-          label="Completed"
+          title="Progress synced"
+          text="Latest project progress was loaded successfully."
           color="#22C55E"
         />
 
-        <StatCard
-          icon="analytics-outline"
-          value={`${averageProgress}%`}
-          label="Average"
+        <ActivityItem
+          icon="document-text-outline"
+          title="Weekly update reminder"
+          text="Submit your project update using the Google Form."
+          color="#60A5FA"
+        />
+
+        <ActivityItem
+          icon="notifications-outline"
+          title="Deadline tracking active"
+          text={`${upcomingDeadlines.length} upcoming deadline(s) found.`}
           color="#F59E0B"
         />
       </View>
 
-      {/* SMART OVERVIEW */}
-      {upcomingProject && (
-        <View style={styles.insightCard}>
-          <View style={styles.insightHeader}>
-            <Ionicons
-              name="bulb-outline"
-              size={22}
-              color="#DBEAFE"
-            />
+      <View style={styles.announcementCard}>
+        <View style={styles.announcementIcon}>
+          <Ionicons name="megaphone-outline" size={24} color="#F59E0B" />
+        </View>
 
-            <Text
-              style={styles.insightTitle}
-            >
-              Smart Overview
-            </Text>
-          </View>
-
-          <Text style={styles.insightText}>
-            Upcoming deadline:{" "}
-            {upcomingProject.title} on{" "}
-            {upcomingProject.dueDate}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.announcementTitle}>Announcement</Text>
+          <Text style={styles.announcementText}>
+            Final project evaluation schedule will be shared soon. Keep your
+            updates and resources ready.
           </Text>
         </View>
-      )}
-
-      {/* SEARCH */}
-      <View style={styles.searchBox}>
-        <Ionicons
-          name="search-outline"
-          size={20}
-          color="#64748B"
-        />
-
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search projects..."
-          placeholderTextColor="#64748B"
-          value={searchText}
-          onChangeText={setSearchText}
-        />
       </View>
-
-      {/* FILTERS */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-      >
-        {filters.map((filter) => (
-          <TouchableOpacity
-            key={filter}
-            style={[
-              styles.filterButton,
-              activeFilter === filter &&
-                styles.filterButtonActive,
-            ]}
-            onPress={() =>
-              setActiveFilter(filter)
-            }
-          >
-            <Text
-              style={[
-                styles.filterText,
-                activeFilter === filter &&
-                  styles.filterTextActive,
-              ]}
-            >
-              {filter}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* PROJECTS */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>
-          Active Projects
-        </Text>
-
-        <Text style={styles.sectionCount}>
-          {filteredProjects.length} shown
-        </Text>
-      </View>
-
-      {filteredProjects.map((project) => (
-        <View
-          key={project.id}
-          style={styles.projectCard}
-        >
-          <View style={styles.projectTop}>
-            <View style={{ flex: 1 }}>
-              <Text
-                style={styles.projectTitle}
-              >
-                {project.title}
-              </Text>
-
-              <Text
-                style={styles.projectMeta}
-              >
-                {project.subject} •{" "}
-                {project.professor}
-              </Text>
-            </View>
-
-            <Text
-              style={[
-                styles.badge,
-                project.status ===
-                  "Completed" &&
-                  styles.completedBadge,
-                project.status ===
-                  "On Track" &&
-                  styles.goodBadge,
-                project.status ===
-                  "Review" &&
-                  styles.warningBadge,
-                project.status ===
-                  "Attention" &&
-                  styles.dangerBadge,
-              ]}
-            >
-              {project.status}
-            </Text>
-          </View>
-
-          <View
-            style={styles.progressHeader}
-          >
-            <Text
-              style={styles.progressLabel}
-            >
-              Progress
-            </Text>
-
-            <Text
-              style={styles.progressValue}
-            >
-              {project.progress}%
-            </Text>
-          </View>
-
-          <View style={styles.progressBg}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${project.progress}%`,
-                },
-                project.status ===
-                  "Completed" &&
-                  styles.progressGood,
-                project.status ===
-                  "On Track" &&
-                  styles.progressGood,
-                project.status ===
-                  "Attention" &&
-                  styles.progressDanger,
-              ]}
-            />
-          </View>
-
-          <View style={styles.projectFooter}>
-            <View style={styles.infoPill}>
-              <Ionicons
-                name="calendar-outline"
-                size={14}
-                color="#94A3B8"
-              />
-              <Text
-                style={styles.infoPillText}
-              >
-                Due {project.dueDate}
-              </Text>
-            </View>
-
-            <View style={styles.infoPill}>
-              <Ionicons
-                name="people-outline"
-                size={14}
-                color="#94A3B8"
-              />
-              <Text
-                style={styles.infoPillText}
-              >
-                {project.students} students
-              </Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.detailsButton}
-            onPress={() =>
-              router.push(
-                `/project/${project.id}`
-              )
-            }
-          >
-            <Text
-              style={
-                styles.detailsButtonText
-              }
-            >
-              See Details
-            </Text>
-
-            <Ionicons
-              name="chevron-forward-outline"
-              size={18}
-              color="#FFFFFF"
-            />
-          </TouchableOpacity>
-        </View>
-      ))}
 
       <View style={{ height: 120 }} />
     </ScrollView>
   );
 }
 
-function StatCard({
+function QuickCard({
   icon,
-  value,
-  label,
+  title,
+  color,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  color: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.quickCard, { borderColor: color }]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
+      <View style={[styles.quickIcon, { backgroundColor: `${color}22` }]}>
+        <Ionicons name={icon} size={22} color={color} />
+      </View>
+
+      <Text style={styles.quickTitle}>{title}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function ActivityItem({
+  icon,
+  title,
+  text,
   color,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
-  value: number | string;
-  label: string;
+  title: string;
+  text: string;
   color: string;
 }) {
   return (
-    <View style={styles.statCard}>
-      <Ionicons
-        name={icon}
-        size={22}
-        color={color}
-      />
+    <View style={styles.activityItem}>
+      <View style={[styles.activityIcon, { backgroundColor: `${color}22` }]}>
+        <Ionicons name={icon} size={20} color={color} />
+      </View>
 
-      <Text style={styles.statNumber}>
-        {value}
-      </Text>
-
-      <Text style={styles.statLabel}>
-        {label}
-      </Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.activityTitle}>{title}</Text>
+        <Text style={styles.activityText}>{text}</Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0B1120",
-    padding: 18,
-  },
-
   loadingContainer: {
     flex: 1,
     backgroundColor: "#0B1120",
     justifyContent: "center",
     alignItems: "center",
   },
-
   loadingText: {
-    color: "#FFFFFF",
-    marginTop: 16,
-    fontSize: 16,
+    color: "#CBD5E1",
+    marginTop: 14,
+    fontWeight: "800",
   },
-
-  topBar: {
+  container: {
+    flex: 1,
+    backgroundColor: "#0B1120",
+    padding: 20,
+  },
+  header: {
     marginTop: 10,
-    marginBottom: 18,
+    marginBottom: 22,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   greeting: {
-    color: "#94A3B8",
-    fontSize: 13,
-    fontWeight: "700",
+    color: "#CBD5E1",
+    fontSize: 15,
+    fontWeight: "800",
   },
-
-  logo: {
+  name: {
     color: "#F8FAFC",
-    fontSize: 30,
+    fontSize: 34,
     fontWeight: "900",
+    marginTop: 4,
   },
-
-  profileCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+  role: {
+    color: "#64748B",
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+  avatar: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: "#2563EB",
-    alignItems: "center",
     justifyContent: "center",
+    alignItems: "center",
   },
-
-  profileText: {
+  avatarText: {
     color: "#FFFFFF",
     fontSize: 20,
     fontWeight: "900",
   },
 
-  hero: {
+  overviewCard: {
     backgroundColor: "#111827",
+    borderWidth: 1,
+    borderColor: "#1E293B",
     borderRadius: 28,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: "#1E293B",
+    padding: 22,
     marginBottom: 18,
   },
-
-  heroIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 18,
-    backgroundColor: "#2563EB",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 18,
-  },
-
-  title: {
-    color: "#F8FAFC",
-    fontSize: 30,
-    fontWeight: "900",
-    lineHeight: 38,
-  },
-
-  subtitle: {
-    color: "#CBD5E1",
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 12,
-    marginBottom: 22,
-  },
-
-  primaryButton: {
-    backgroundColor: "#2563EB",
-    paddingVertical: 15,
-    borderRadius: 16,
+  overviewTop: {
     flexDirection: "row",
-    justifyContent: "center",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
   },
-
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "900",
-    fontSize: 16,
-  },
-
-  statsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 18,
-  },
-
-  statCard: {
-    flex: 1,
-    backgroundColor: "#020617",
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    borderRadius: 20,
-    padding: 16,
-  },
-
-  statNumber: {
-    color: "#F8FAFC",
-    fontSize: 23,
-    fontWeight: "900",
-    marginTop: 8,
-  },
-
-  statLabel: {
+  overviewTitle: {
     color: "#94A3B8",
-    fontSize: 11,
-    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  dashboardButton: {
+  marginTop: 18,
+  backgroundColor: "#2563EB",
+  paddingVertical: 14,
+  borderRadius: 16,
+  flexDirection: "row",
+  justifyContent: "center",
+  alignItems: "center",
+  gap: 8,
+},
+
+dashboardButtonText: {
+  color: "#FFFFFF",
+  fontSize: 15,
+  fontWeight: "900",
+},
+  dashboardLink: {
+    color: "#60A5FA",
+    fontWeight: "900",
+    fontSize: 13,
+  },
+  overviewPercent: {
+    color: "#F8FAFC",
+    fontSize: 42,
+    fontWeight: "900",
+    marginTop: 12,
+  },
+  overviewProgressBg: {
+    height: 10,
+    backgroundColor: "#1E293B",
+    borderRadius: 20,
+    marginTop: 14,
+  },
+  overviewProgressFill: {
+    height: 10,
+    backgroundColor: "#2563EB",
+    borderRadius: 20,
+  },
+  overviewStats: {
+    color: "#94A3B8",
+    marginTop: 12,
     fontWeight: "700",
   },
 
-  insightCard: {
-    backgroundColor: "#172554",
-    borderRadius: 22,
-    padding: 18,
+  focusCard: {
+    backgroundColor: "#111827",
     borderWidth: 1,
-    borderColor: "#2563EB",
-    marginBottom: 16,
+    borderColor: "#1E293B",
+    borderRadius: 30,
+    padding: 24,
+    marginBottom: 20,
   },
-
-  insightHeader: {
+  focusTop: {
     flexDirection: "row",
+    gap: 14,
     alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
   },
-
-  insightTitle: {
-    color: "#F8FAFC",
-    fontSize: 18,
+  focusIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 20,
+    backgroundColor: "#2563EB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  focusLabel: {
+    color: "#60A5FA",
+    fontSize: 13,
     fontWeight: "900",
   },
-
-  insightText: {
-    color: "#DBEAFE",
+  focusTitle: {
+    color: "#F8FAFC",
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+  focusText: {
+    color: "#CBD5E1",
+    marginTop: 18,
     lineHeight: 22,
   },
-
-  searchBox: {
-    backgroundColor: "#020617",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    paddingHorizontal: 14,
-    marginBottom: 16,
+  focusProgressBg: {
+    height: 11,
+    backgroundColor: "#1E293B",
+    borderRadius: 20,
+    marginTop: 18,
+  },
+  focusProgressFill: {
+    height: 11,
+    backgroundColor: "#2563EB",
+    borderRadius: 20,
+  },
+  continueButton: {
+    backgroundColor: "#2563EB",
+    paddingVertical: 14,
+    borderRadius: 16,
+    marginTop: 18,
     flexDirection: "row",
+    justifyContent: "center",
     alignItems: "center",
     gap: 8,
   },
-
-  searchInput: {
-    flex: 1,
-    paddingVertical: 14,
-    color: "#F8FAFC",
+  continueText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 15,
   },
 
-  filterButton: {
+  quickGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 18,
+  },
+  quickCard: {
+    width: "32%",
     backgroundColor: "#020617",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginRight: 10,
     borderWidth: 1,
     borderColor: "#1E293B",
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: "center",
   },
-
-  filterButtonActive: {
-    backgroundColor: "#2563EB",
-    borderColor: "#2563EB",
+  quickIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
   },
-
-  filterText: {
-    color: "#94A3B8",
-    fontWeight: "800",
-  },
-
-  filterTextActive: {
-    color: "#FFFFFF",
+  quickTitle: {
+    color: "#F8FAFC",
+    fontSize: 12,
+    fontWeight: "900",
+    textAlign: "center",
   },
 
   sectionHeader: {
-    marginTop: 20,
-    marginBottom: 14,
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
   },
-
   sectionTitle: {
     color: "#F8FAFC",
     fontSize: 22,
     fontWeight: "900",
   },
-
-  sectionCount: {
+  sectionLink: {
     color: "#60A5FA",
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
-  projectCard: {
+  deadlineCard: {
     backgroundColor: "#111827",
-    borderRadius: 22,
-    padding: 18,
     borderWidth: 1,
     borderColor: "#1E293B",
-    marginBottom: 14,
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 20,
   },
-
-  projectTop: {
+  deadlineItem: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10,
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1E293B",
   },
-
-  projectTitle: {
+  deadlineDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#22C55E",
+  },
+  deadlineDotDanger: {
+    backgroundColor: "#EF4444",
+  },
+  deadlineTitle: {
     color: "#F8FAFC",
-    fontSize: 17,
     fontWeight: "900",
+    fontSize: 15,
   },
-
-  projectMeta: {
+  deadlineMeta: {
     color: "#94A3B8",
-    marginTop: 5,
-    fontSize: 13,
+    marginTop: 4,
+    fontSize: 12,
   },
-
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    fontSize: 11,
-    fontWeight: "900",
-  },
-
-  completedBadge: {
-    color: "#BBF7D0",
-    backgroundColor: "#052E16",
-  },
-
-  goodBadge: {
+  daysBadge: {
     color: "#22C55E",
     backgroundColor: "#052E16",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    overflow: "hidden",
+    fontWeight: "900",
+    fontSize: 12,
   },
-
-  warningBadge: {
-    color: "#F59E0B",
-    backgroundColor: "#451A03",
-  },
-
-  dangerBadge: {
+  daysBadgeDanger: {
     color: "#EF4444",
     backgroundColor: "#450A0A",
   },
 
-  progressHeader: {
+  aiBanner: {
+    backgroundColor: "#172554",
+    borderWidth: 1,
+    borderColor: "#2563EB",
+    borderRadius: 26,
+    padding: 22,
+    marginBottom: 20,
+  },
+  aiTop: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 16,
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 10,
   },
-
-  progressLabel: {
-    color: "#94A3B8",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  progressValue: {
+  aiTitle: {
     color: "#F8FAFC",
-    fontSize: 12,
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  aiText: {
+    color: "#DBEAFE",
+    lineHeight: 23,
+    fontWeight: "700",
+  },
+  aiButton: {
+    marginTop: 18,
+    backgroundColor: "#DBEAFE",
+    paddingVertical: 13,
+    borderRadius: 16,
+  },
+  aiButtonText: {
+    color: "#172554",
+    textAlign: "center",
     fontWeight: "900",
   },
 
-  progressBg: {
-    height: 9,
-    backgroundColor: "#1E293B",
-    borderRadius: 20,
-    marginTop: 8,
+  activityCard: {
+    backgroundColor: "#111827",
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 20,
   },
-
-  progressFill: {
-    height: 9,
-    backgroundColor: "#F59E0B",
-    borderRadius: 20,
-  },
-
-  progressGood: {
-    backgroundColor: "#22C55E",
-  },
-
-  progressDanger: {
-    backgroundColor: "#EF4444",
-  },
-
-  projectFooter: {
+  activityItem: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 14,
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1E293B",
   },
-
-  infoPill: {
-    flexDirection: "row",
+  activityIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    justifyContent: "center",
     alignItems: "center",
-    gap: 5,
+  },
+  activityTitle: {
+    color: "#F8FAFC",
+    fontWeight: "900",
+  },
+  activityText: {
+    color: "#94A3B8",
+    marginTop: 3,
+    lineHeight: 19,
+  },
+
+  announcementCard: {
     backgroundColor: "#020617",
     borderWidth: 1,
     borderColor: "#1E293B",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 14,
-  },
-
-  infoPillText: {
-    color: "#94A3B8",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  detailsButton: {
-    backgroundColor: "#2563EB",
-    marginTop: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: 24,
+    padding: 18,
     flexDirection: "row",
+    gap: 14,
+    alignItems: "flex-start",
+  },
+  announcementIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: "#451A03",
     justifyContent: "center",
     alignItems: "center",
-    gap: 6,
   },
-
-  detailsButtonText: {
-    color: "#FFFFFF",
+  announcementTitle: {
+    color: "#F8FAFC",
+    fontSize: 17,
     fontWeight: "900",
+  },
+  announcementText: {
+    color: "#94A3B8",
+    marginTop: 5,
+    lineHeight: 21,
+  },
+  emptyText: {
+    color: "#94A3B8",
+    textAlign: "center",
+    paddingVertical: 20,
   },
 });
