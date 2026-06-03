@@ -171,14 +171,9 @@ export default function HomeScreen() {
   onPress={() => router.push("/(tabs)/dashboard")}
 >
   <Text style={styles.dashboardButtonText}>
-    Open Dashboard
+    Open Dashboard ᯓ  ✈︎
   </Text>
 
-  <Ionicons
-    name="arrow-forward-outline"
-    size={18}
-    color="#FFFFFF"
-  />
 </TouchableOpacity>
       </View>
 
@@ -217,12 +212,8 @@ export default function HomeScreen() {
               style={styles.continueButton}
               onPress={() => router.push(`/project/${focusProject.id}`)}
             >
-              <Text style={styles.continueText}>Continue Project</Text>
-              <Ionicons
-                name="arrow-forward-outline"
-                size={18}
-                color="#FFFFFF"
-              />
+              <Text style={styles.continueText}>Continue Project ᯓ ✈︎</Text>
+        
             </TouchableOpacity>
           </>
         )}
@@ -255,7 +246,7 @@ export default function HomeScreen() {
         <Text style={styles.sectionTitle}>Upcoming Deadlines</Text>
 
         <TouchableOpacity onPress={() => router.push("/(tabs)/dashboard")}>
-          <Text style={styles.sectionLink}>View all →</Text>
+          <Text style={styles.sectionLink}>View all ᯓ✈︎</Text>
         </TouchableOpacity>
       </View>
 

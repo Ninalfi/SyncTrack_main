@@ -578,7 +578,7 @@ function StudentProjectCard({ project }: { project: ProjectWithStatus }) {
         </Text>
 
         <TouchableOpacity onPress={() => router.push(`/project/${project.id}`)}>
-          <Text style={styles.detailsText}>View Details →</Text>
+          <Text style={styles.detailsText}>View Details ᯓ  ✈︎</Text>
         </TouchableOpacity>
       </View>
     </View>

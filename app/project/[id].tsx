@@ -121,7 +121,7 @@ export default function ProjectDetails() {
         }
       >
         <Text style={styles.back}>
-          ← Back to Dashboard
+          ⬅️ Back to Dashboard
         </Text>
       </TouchableOpacity>
 
