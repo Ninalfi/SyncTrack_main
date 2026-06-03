@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
@@ -334,18 +335,27 @@ function StudentDashboard({
         </Text>
       </View>
 
-      <View style={styles.actionRow}>
-        <ActionButton
-          title="Submit Update"
-          icon="cloud-upload-outline"
-          color="#2563EB"
-        />
-        <ActionButton
-          title="Ask AI"
-          icon="sparkles-outline"
-          color="#7C3AED"
-        />
-      </View>
+<View style={styles.actionRow}>
+  <ActionButton
+    title="Submit Update"
+    icon="cloud-upload-outline"
+    color="#2563EB"
+    onPress={() =>
+      Linking.openURL(
+        "https://docs.google.com/forms/d/e/1FAIpQLSd59MAxyyTne1lu0Lih_QBaUhwK4Yf-FwkZhFIf9JTbQmM0vg/viewform?pli=1"
+      )
+    }
+  />
+
+  <ActionButton
+    title="Ask AI"
+    icon="sparkles-outline"
+    color="#7C3AED"
+    onPress={() => {
+      console.log("AI clicked");
+    }}
+  />
+</View>
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>My Projects</Text>
@@ -494,13 +504,19 @@ function ActionButton({
   title,
   icon,
   color,
+  onPress,
 }: {
   title: string;
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
+  onPress?: () => void;
 }) {
   return (
-    <TouchableOpacity style={[styles.actionButton, { borderColor: color }]}>
+    <TouchableOpacity
+      style={[styles.actionButton, { borderColor: color }]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
       <Ionicons name={icon} size={20} color={color} />
       <Text style={styles.actionText}>{title}</Text>
     </TouchableOpacity>
