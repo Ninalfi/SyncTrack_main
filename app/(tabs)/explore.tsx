@@ -87,6 +87,50 @@ type Resource = {
 
 const RESOURCES_STORAGE_KEY = "@synctrack_resources";
 
+
+const teachers = [
+  {
+    id: "t1",
+    name: "Dr. Smith",
+    department: "Computer Science",
+    email: "dr.smith@university.edu",
+    officeHours: "Sun & Tue · 2:00 PM–4:00 PM",
+  },
+  {
+    id: "t2",
+    name: "Mr. Ahmed",
+    department: "Software Engineering",
+    email: "mr.ahmed@university.edu",
+    officeHours: "Mon & Wed · 11:00 AM–1:00 PM",
+  },
+  {
+    id: "t3",
+    name: "Ms. Rahman",
+    department: "Information Technology",
+    email: "ms.rahman@university.edu",
+    officeHours: "Thu · 10:00 AM–12:00 PM",
+  },
+];
+
+const inboxMessages = [
+  {
+    id: "m1",
+    sender: "Dr. Smith",
+    subject: "Project progress reminder",
+    preview: "Please upload your latest weekly update before the deadline.",
+    time: "Today",
+    unread: true,
+  },
+  {
+    id: "m2",
+    sender: "Mr. Ahmed",
+    subject: "UI feedback",
+    preview: "The new dashboard layout looks good. Please refine the spacing.",
+    time: "Yesterday",
+    unread: false,
+  },
+];
+
 const aiSuggestions = [
   "Help me improve my dashboard UI",
   "Explain CPU scheduling",
@@ -325,6 +369,54 @@ export default function ExploreScreen() {
     await saveSubmissions(updated);
   }
 
+
+  async function sendEmail(
+    email: string,
+    subject = "SyncTrack Project Communication"
+  ) {
+    const url = `mailto:${email}?subject=${encodeURIComponent(subject)}`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+
+      if (!canOpen) {
+        Alert.alert(
+          "Email app unavailable",
+          "No email application is configured on this device."
+        );
+        return;
+      }
+
+      await Linking.openURL(url);
+    } catch (error) {
+      console.log("Email error:", error);
+      Alert.alert("Could not open email", "Please try again.");
+    }
+  }
+
+  async function composeNewEmail() {
+    const url = `mailto:?subject=${encodeURIComponent(
+      "SyncTrack Academic Communication"
+    )}`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+
+      if (!canOpen) {
+        Alert.alert(
+          "Email app unavailable",
+          "No email application is configured on this device."
+        );
+        return;
+      }
+
+      await Linking.openURL(url);
+    } catch (error) {
+      console.log("Compose email error:", error);
+      Alert.alert("Could not open email", "Please try again.");
+    }
+  }
+
   async function openSubmission(item: Submission) {
     try {
       const canOpen = await Linking.canOpenURL(item.uri);
@@ -361,6 +453,180 @@ export default function ExploreScreen() {
               {item.unread > 0 ? <View style={styles.unreadBadge}><Text style={styles.unreadText}>{item.unread}</Text></View> : <Ionicons name="chevron-forward" size={17} color={C.muted} />}
             </TouchableOpacity>
           ))}
+        </SectionCard>
+
+
+        <SectionCard
+          title="Mail Center"
+          subtitle="Teacher contacts, email, and inbox"
+          icon="mail-outline"
+          iconColor={C.purple}
+          iconBackground={C.purpleLight}
+        >
+          <View style={styles.mailQuickActions}>
+            <TouchableOpacity
+              style={styles.composeMailButton}
+              onPress={composeNewEmail}
+              activeOpacity={0.85}
+            >
+              <View style={styles.composeMailIcon}>
+                <Ionicons
+                  name="create-outline"
+                  size={21}
+                  color={C.white}
+                />
+              </View>
+
+              <View style={styles.flex}>
+                <Text style={styles.composeMailTitle}>Compose Email</Text>
+                <Text style={styles.composeMailText}>
+                  Open your email app and write a new message
+                </Text>
+              </View>
+
+              <Ionicons
+                name="arrow-forward"
+                size={18}
+                color={C.white}
+              />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.mailSectionLabel}>TEACHER CONTACTS</Text>
+
+          {teachers.map((teacher, index) => (
+            <View
+              key={teacher.id}
+              style={[
+                styles.teacherRow,
+                index === teachers.length - 1 && styles.lastTeacherRow,
+              ]}
+            >
+              <View style={styles.teacherAvatar}>
+                <Text style={styles.teacherAvatarText}>
+                  {teacher.name
+                    .split(" ")
+                    .map((part) => part[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </Text>
+              </View>
+
+              <View style={styles.teacherInformation}>
+                <Text style={styles.teacherName}>{teacher.name}</Text>
+                <Text style={styles.teacherDepartment}>
+                  {teacher.department}
+                </Text>
+                <Text style={styles.teacherEmail} numberOfLines={1}>
+                  {teacher.email}
+                </Text>
+                <Text style={styles.teacherOfficeHours}>
+                  Office hours: {teacher.officeHours}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.teacherMailButton}
+                onPress={() =>
+                  sendEmail(
+                    teacher.email,
+                    `SyncTrack message for ${teacher.name}`
+                  )
+                }
+                accessibilityLabel={`Send email to ${teacher.name}`}
+              >
+                <Ionicons
+                  name="mail-outline"
+                  size={19}
+                  color={C.purple}
+                />
+              </TouchableOpacity>
+            </View>
+          ))}
+
+          <View style={styles.inboxHeader}>
+            <View>
+              <Text style={styles.mailSectionLabel}>INBOX</Text>
+              <Text style={styles.inboxSubtitle}>
+                {inboxMessages.filter((message) => message.unread).length} unread
+              </Text>
+            </View>
+
+            <View style={styles.optionalBadge}>
+              <Text style={styles.optionalBadgeText}>Optional</Text>
+            </View>
+          </View>
+
+          <View style={styles.inboxList}>
+            {inboxMessages.map((message, index) => (
+              <TouchableOpacity
+                key={message.id}
+                style={[
+                  styles.inboxRow,
+                  message.unread && styles.inboxRowUnread,
+                  index === inboxMessages.length - 1 && styles.lastRow,
+                ]}
+                activeOpacity={0.78}
+                onPress={() =>
+                  Alert.alert(
+                    message.subject,
+                    `${message.sender}\n\n${message.preview}`
+                  )
+                }
+              >
+                <View
+                  style={[
+                    styles.inboxStatusDot,
+                    {
+                      backgroundColor: message.unread
+                        ? C.primary
+                        : C.divider,
+                    },
+                  ]}
+                />
+
+                <View style={styles.inboxContent}>
+                  <View style={styles.rowBetween}>
+                    <Text
+                      style={[
+                        styles.inboxSender,
+                        message.unread && styles.inboxTextUnread,
+                      ]}
+                    >
+                      {message.sender}
+                    </Text>
+                    <Text style={styles.inboxTime}>{message.time}</Text>
+                  </View>
+
+                  <Text
+                    style={[
+                      styles.inboxSubject,
+                      message.unread && styles.inboxTextUnread,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {message.subject}
+                  </Text>
+
+                  <Text style={styles.inboxPreview} numberOfLines={1}>
+                    {message.preview}
+                  </Text>
+                </View>
+
+                <Ionicons
+                  name="chevron-forward"
+                  size={17}
+                  color={C.muted}
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.inboxNote}>
+            Inbox items are currently sample data. Connect Firebase, Supabase,
+            or an email API later for real received messages.
+          </Text>
         </SectionCard>
 
         <SectionCard title="File Submission Center" subtitle={`${submissions.length} submitted file${submissions.length === 1 ? "" : "s"}`} icon="cloud-upload-outline" iconColor={C.success} iconBackground={C.successLight}>
@@ -594,94 +860,21 @@ function getStatusBackground(status: SubmissionStatus) {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-     flex: 1, backgroundColor: C.bg 
-    },
-  container: {
-     flex: 1, 
-     backgroundColor: C.bg
-     },
-  content: { 
-    paddingHorizontal: 20,
-     paddingTop: 16
-   },
-  eyebrow: { 
-    color: C.primaryDark, 
-    fontSize: 11, 
-    fontWeight: "900",
-     letterSpacing: 1
-     },
-  pageTitle: { 
-    color: C.text, 
-    fontSize: 32, 
-    lineHeight: 39,
-     fontWeight: "900",
-      marginTop: 3
-     },
-  subtitle: { 
-    color: C.secondary, 
-    marginTop: 6, 
-    marginBottom: 22, 
-    lineHeight: 21, 
-    fontSize: 13 
-  },
-  card: { 
-    backgroundColor: C.card, 
-    borderWidth: 1,
-     borderColor: C.border, 
-     borderRadius: 24, 
-     padding: 17,
-      marginBottom: 20,
-       shadowColor: "#1D2939",
-        shadowOffset: { width: 0, height: 8 }, 
-        shadowOpacity: 0.05, 
-        shadowRadius: 16,
-         elevation: 3 
-        },
-  cardHeader: { 
-    flexDirection: "row", 
-    justifyContent: "space-between",
-     alignItems: "flex-start",
-      marginBottom: 14 
-    },
-  cardHeading: { 
-    flex: 1, 
-    paddingRight: 12
-   },
-  cardTitle: { 
-    color: C.text,
-     fontSize: 19,
-      fontWeight: "900"
-     },
-  cardSubtitle: { 
-    color: C.secondary,
-     marginTop: 4, 
-     fontSize: 12 
-    },
-  headerIcon: {
-     width: 44,
-      height: 44,
-       borderRadius: 14,
-        alignItems: "center",
-         justifyContent: "center"
-         },
-  messageRow: {
-     flexDirection: "row",
-      alignItems: "center",
-       paddingVertical: 13,
-        borderBottomWidth: 1, 
-        borderBottomColor: C.divider 
-      },
-  avatarWrap: { 
-    marginRight: 12 },
-  avatar: {
-     width: 45,
-      height: 45, 
-      borderRadius: 23,
-       backgroundColor: C.primary,
-        alignItems: "center",
-         justifyContent: "center"
-         },
+  safe: { flex: 1, backgroundColor: C.bg },
+  container: { flex: 1, backgroundColor: C.bg },
+  content: { paddingHorizontal: 20, paddingTop: 16 },
+  eyebrow: { color: C.primaryDark, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
+  pageTitle: { color: C.text, fontSize: 32, lineHeight: 39, fontWeight: "900", marginTop: 3 },
+  subtitle: { color: C.secondary, marginTop: 6, marginBottom: 22, lineHeight: 21, fontSize: 13 },
+  card: { backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 24, padding: 17, marginBottom: 20, shadowColor: "#1D2939", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.05, shadowRadius: 16, elevation: 3 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 },
+  cardHeading: { flex: 1, paddingRight: 12 },
+  cardTitle: { color: C.text, fontSize: 19, fontWeight: "900" },
+  cardSubtitle: { color: C.secondary, marginTop: 4, fontSize: 12 },
+  headerIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  messageRow: { flexDirection: "row", alignItems: "center", paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.divider },
+  avatarWrap: { marginRight: 12 },
+  avatar: { width: 45, height: 45, borderRadius: 23, backgroundColor: C.primary, alignItems: "center", justifyContent: "center" },
   avatarText: { color: C.white, fontWeight: "900", fontSize: 17 },
   onlineDot: { position: "absolute", right: -1, bottom: 1, width: 11, height: 11, borderRadius: 6, borderWidth: 2, borderColor: C.card },
   flex: { flex: 1 },
@@ -692,6 +885,216 @@ const styles = StyleSheet.create({
   previewText: { color: C.secondary, marginTop: 4, fontSize: 12, paddingRight: 8 },
   unreadBadge: { backgroundColor: C.danger, minWidth: 23, height: 23, borderRadius: 12, alignItems: "center", justifyContent: "center", paddingHorizontal: 6, marginLeft: 7 },
   unreadText: { color: C.white, fontSize: 11, fontWeight: "900" },
+
+  mailQuickActions: {
+    marginBottom: 17,
+  },
+
+  composeMailButton: {
+    backgroundColor: C.purple,
+    borderRadius: 17,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  composeMailIcon: {
+    width: 41,
+    height: 41,
+    borderRadius: 13,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+  },
+
+  composeMailTitle: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  composeMailText: {
+    color: "#ECE9FF",
+    fontSize: 10,
+    marginTop: 3,
+    lineHeight: 15,
+  },
+
+  mailSectionLabel: {
+    color: C.muted,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+
+  teacherRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: C.divider,
+  },
+
+  lastTeacherRow: {
+    borderBottomWidth: 0,
+    marginBottom: 13,
+  },
+
+  teacherAvatar: {
+    width: 43,
+    height: 43,
+    borderRadius: 15,
+    backgroundColor: C.purpleLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+  },
+
+  teacherAvatarText: {
+    color: C.purple,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  teacherInformation: {
+    flex: 1,
+    paddingRight: 8,
+  },
+
+  teacherName: {
+    color: C.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  teacherDepartment: {
+    color: C.secondary,
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  teacherEmail: {
+    color: C.purple,
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+
+  teacherOfficeHours: {
+    color: C.muted,
+    fontSize: 9,
+    marginTop: 3,
+  },
+
+  teacherMailButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: C.purpleLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  inboxHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginTop: 4,
+    marginBottom: 7,
+  },
+
+  inboxSubtitle: {
+    color: C.secondary,
+    fontSize: 10,
+    marginTop: -5,
+  },
+
+  optionalBadge: {
+    backgroundColor: C.soft,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+
+  optionalBadgeText: {
+    color: C.secondary,
+    fontSize: 9,
+    fontWeight: "800",
+  },
+
+  inboxList: {
+    backgroundColor: C.soft,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: "hidden",
+  },
+
+  inboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.divider,
+  },
+
+  inboxRowUnread: {
+    backgroundColor: C.primaryLight,
+  },
+
+  inboxStatusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+
+  inboxContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+
+  inboxSender: {
+    color: C.secondary,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  inboxTime: {
+    color: C.muted,
+    fontSize: 9,
+  },
+
+  inboxSubject: {
+    color: C.text,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+
+  inboxTextUnread: {
+    fontWeight: "900",
+    color: C.text,
+  },
+
+  inboxPreview: {
+    color: C.secondary,
+    fontSize: 10,
+    marginTop: 3,
+  },
+
+  inboxNote: {
+    color: C.muted,
+    fontSize: 9,
+    lineHeight: 14,
+    marginTop: 9,
+  },
+
   uploadButton: { backgroundColor: C.primary, paddingVertical: 13, borderRadius: 15, flexDirection: "row", gap: 8, justifyContent: "center", alignItems: "center", marginBottom: 8 },
   uploadButtonDisabled: { opacity: 0.55 },
   uploadText: { color: C.white, fontWeight: "900", fontSize: 13 },
