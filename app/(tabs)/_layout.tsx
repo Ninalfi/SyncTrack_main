@@ -1,25 +1,76 @@
-import { Tabs } from "expo-router";
+// app/(tabs)/_layout.tsx
 import { Ionicons } from "@expo/vector-icons";
+import { Tabs } from "expo-router";
+import { Platform, View } from "react-native";
+
+import { Palette, Radius, Shadow } from "@/constants/theme";
+
+type TabIconProps = {
+  focused: boolean;
+  activeName: keyof typeof Ionicons.glyphMap;
+  inactiveName: keyof typeof Ionicons.glyphMap;
+};
+
+function TabIcon({
+  focused,
+  activeName,
+  inactiveName,
+}: TabIconProps) {
+  return (
+    <View
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: Radius.md,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: focused
+          ? Palette.primaryLight
+          : "transparent",
+      }}
+    >
+      <Ionicons
+        name={focused ? activeName : inactiveName}
+        size={23}
+        color={focused ? Palette.primary : Palette.textMuted}
+      />
+    </View>
+  );
+}
 
 export default function TabLayout() {
   return (
-  
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        tabBarActiveTintColor: "#2563EB",
-        tabBarInactiveTintColor: "#64748B",
+
+        tabBarActiveTintColor: Palette.primary,
+        tabBarInactiveTintColor: Palette.textMuted,
+
         tabBarStyle: {
           position: "absolute",
-          height: 72,
-          bottom: 18,
-          left: 20,
-          right: 20,
-          borderRadius: 28,
-          backgroundColor: "#F8FAFC",
+          height: Platform.OS === "ios" ? 82 : 72,
+          bottom: Platform.OS === "ios" ? 20 : 16,
+          left: 18,
+          right: 18,
+
+          paddingTop: 10,
+          paddingBottom: Platform.OS === "ios" ? 18 : 10,
+
+          borderRadius: Radius.xxl,
           borderTopWidth: 0,
-          elevation: 12,
+          backgroundColor: Palette.surface,
+
+          ...Shadow.floating,
+        },
+
+        tabBarItemStyle: {
+          borderRadius: Radius.lg,
+        },
+
+        sceneStyle: {
+          backgroundColor: Palette.background,
         },
       }}
     >
@@ -27,8 +78,12 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              focused={focused}
+              activeName="home"
+              inactiveName="home-outline"
+            />
           ),
         }}
       />
@@ -36,18 +91,12 @@ export default function TabLayout() {
       <Tabs.Screen
         name="dashboard"
         options={{
-          title: "Dashboard",
+          title: "Projects",
           tabBarIcon: ({ focused }) => (
-            <Ionicons
-              name="grid-outline"
-              size={26}
-              color="#FFFFFF"
-              style={{
-                backgroundColor: focused ? "#2563EB" : "#0F172A",
-                padding: 15,
-                borderRadius: 40,
-                marginBottom: 30,
-              }}
+            <TabIcon
+              focused={focused}
+              activeName="grid"
+              inactiveName="grid-outline"
             />
           ),
         }}
@@ -57,11 +106,29 @@ export default function TabLayout() {
         name="explore"
         options={{
           title: "Analytics",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bar-chart-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              focused={focused}
+              activeName="bar-chart"
+              inactiveName="bar-chart-outline"
+            />
           ),
         }}
       />
+      <Tabs.Screen
+  name="calendar"
+  options={{
+    title: "Calendar",
+    tabBarIcon: ({ color, size }) => (
+      <Ionicons
+        name="calendar-outline"
+        size={size}
+        color={color}
+      />
+    ),
+  }}
+/>
     </Tabs>
+    
   );
 }

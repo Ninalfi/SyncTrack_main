@@ -1,6 +1,36 @@
-import { ScrollView, View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import {
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+const C = {
+  bg: "#F2F1FC",
+  card: "#FFFFFF",
+  soft: "#F8FAFC",
+  primary: "#1BBEE4",
+  primaryDark: "#0797BC",
+  primaryLight: "#DDF8FF",
+  text: "#171A21",
+  secondary: "#667085",
+  muted: "#98A2B3",
+  border: "#E7EAF0",
+  divider: "#EEF1F5",
+  success: "#63C174",
+  successLight: "#EAF8ED",
+  warning: "#F5AE2B",
+  warningLight: "#FFF5DC",
+  danger: "#EF5A5A",
+  dangerLight: "#FFF0F0",
+  purple: "#7B61FF",
+  purpleLight: "#EEEAFE",
+  white: "#FFFFFF",
+};
 
 const messages = [
   {
@@ -70,361 +100,611 @@ const aiSuggestions = [
 
 export default function ExploreScreen() {
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <Text style={styles.pageTitle}>Workspace</Text>
-      <Text style={styles.subtitle}>
-        Communicate, submit files, access resources, and get AI-powered support.
-      </Text>
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.eyebrow}>STUDENT WORKSPACE</Text>
+        <Text style={styles.pageTitle}>Explore</Text>
+        <Text style={styles.subtitle}>
+          Communicate, submit files, access resources, and get AI-powered support.
+        </Text>
 
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View>
-            <Text style={styles.cardTitle}>Messages</Text>
-            <Text style={styles.cardSubtitle}>Chat with professors</Text>
-          </View>
-          <Ionicons name="chatbubbles-outline" size={24} color="#60A5FA" />
-        </View>
-
-        {messages.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={styles.messageCard}
-            onPress={() => router.push(`/chat/${item.id}`)}
-          >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
-            </View>
-
-            <View style={{ flex: 1 }}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.messageName}>{item.name}</Text>
-                <Text style={styles.timeText}>{item.time}</Text>
+        <SectionCard
+          title="Messages"
+          subtitle="Chat with professors"
+          icon="chatbubbles-outline"
+          iconColor={C.primary}
+          iconBackground={C.primaryLight}
+        >
+          {messages.map((item, index) => (
+            <TouchableOpacity
+              key={item.id}
+              style={[
+                styles.messageRow,
+                index === messages.length - 1 && styles.lastRow,
+              ]}
+              onPress={() => router.push(`/chat/${item.id}`)}
+              activeOpacity={0.78}
+            >
+              <View style={styles.avatarWrap}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+                </View>
+                <View
+                  style={[
+                    styles.onlineDot,
+                    { backgroundColor: item.online ? C.success : C.muted },
+                  ]}
+                />
               </View>
 
-              <Text style={styles.roleText}>{item.role}</Text>
-              <Text style={styles.previewText}>{item.lastMessage}</Text>
-            </View>
+              <View style={styles.flex}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.messageName}>{item.name}</Text>
+                  <Text style={styles.timeText}>{item.time}</Text>
+                </View>
 
-            {item.unread > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>{item.unread}</Text>
+                <Text style={styles.roleText}>{item.role}</Text>
+                <Text style={styles.previewText} numberOfLines={1}>
+                  {item.lastMessage}
+                </Text>
               </View>
-            )}
+
+              {item.unread > 0 ? (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadText}>{item.unread}</Text>
+                </View>
+              ) : (
+                <Ionicons
+                  name="chevron-forward"
+                  size={17}
+                  color={C.muted}
+                />
+              )}
+            </TouchableOpacity>
+          ))}
+        </SectionCard>
+
+        <SectionCard
+          title="File Submission Center"
+          subtitle="Upload and track project files"
+          icon="cloud-upload-outline"
+          iconColor={C.success}
+          iconBackground={C.successLight}
+        >
+          <TouchableOpacity style={styles.uploadButton} activeOpacity={0.85}>
+            <Ionicons name="add-circle-outline" size={20} color={C.white} />
+            <Text style={styles.uploadText}>Upload New File</Text>
           </TouchableOpacity>
-        ))}
-      </View>
 
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View>
-            <Text style={styles.cardTitle}>File Submission Center</Text>
-            <Text style={styles.cardSubtitle}>Upload and track project files</Text>
-          </View>
-          <Ionicons name="cloud-upload-outline" size={24} color="#22C55E" />
-        </View>
+          {submissions.map((item, index) => {
+            const approved = item.status === "Approved";
 
-        <TouchableOpacity style={styles.uploadButton}>
-          <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.uploadText}>Upload New File</Text>
-        </TouchableOpacity>
+            return (
+              <View
+                key={item.id}
+                style={[
+                  styles.fileRow,
+                  index === submissions.length - 1 && styles.lastRow,
+                ]}
+              >
+                <View style={styles.fileIcon}>
+                  <Ionicons
+                    name="document-text-outline"
+                    size={22}
+                    color={C.primaryDark}
+                  />
+                </View>
 
-        {submissions.map((item) => (
-          <View key={item.id} style={styles.fileCard}>
-            <Ionicons name="document-text-outline" size={24} color="#60A5FA" />
+                <View style={styles.flex}>
+                  <Text style={styles.fileName}>{item.fileName}</Text>
+                  <Text style={styles.fileMeta}>
+                    {item.project} · {item.uploadedAt}
+                  </Text>
+                </View>
 
-            <View style={{ flex: 1 }}>
-              <Text style={styles.fileName}>{item.fileName}</Text>
-              <Text style={styles.fileMeta}>
-                {item.project} • {item.uploadedAt}
+                <View
+                  style={[
+                    styles.statusBadge,
+                    {
+                      backgroundColor: approved
+                        ? C.successLight
+                        : C.warningLight,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusText,
+                      { color: approved ? C.success : C.warning },
+                    ]}
+                  >
+                    {item.status}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </SectionCard>
+
+        <SectionCard
+          title="Resource Library"
+          subtitle="Learning materials from professors"
+          icon="library-outline"
+          iconColor={C.warning}
+          iconBackground={C.warningLight}
+        >
+          {resources.map((item, index) => (
+            <TouchableOpacity
+              key={item.id}
+              style={[
+                styles.resourceRow,
+                index === resources.length - 1 && styles.lastRow,
+              ]}
+              activeOpacity={0.76}
+            >
+              <View style={styles.resourceTypeBox}>
+                <Text style={styles.resourceType}>{item.type}</Text>
+              </View>
+
+              <View style={styles.flex}>
+                <Text style={styles.resourceTitle}>{item.title}</Text>
+                <Text style={styles.resourceSubject}>{item.subject}</Text>
+              </View>
+
+              <View style={styles.downloadButton}>
+                <Ionicons
+                  name="download-outline"
+                  size={19}
+                  color={C.primaryDark}
+                />
+              </View>
+            </TouchableOpacity>
+          ))}
+        </SectionCard>
+
+        <View style={styles.aiCard}>
+          <View style={styles.aiHeader}>
+            <View style={styles.aiHeaderIcon}>
+              <Ionicons
+                name="sparkles-outline"
+                size={25}
+                color={C.purple}
+              />
+            </View>
+
+            <View style={styles.flex}>
+              <Text style={styles.aiTitle}>SyncTrack AI Assistant</Text>
+              <Text style={styles.aiSubtitle}>
+                Ask for project help, explanations, or debugging support.
               </Text>
             </View>
+          </View>
 
-            <Text
-              style={[
-                styles.status,
-                item.status === "Approved" ? styles.approved : styles.pending,
-              ]}
+          {aiSuggestions.map((item) => (
+            <TouchableOpacity
+              key={item}
+              style={styles.aiSuggestion}
+              onPress={() =>
+                router.push(`/ai?prompt=${encodeURIComponent(item)}`)
+              }
+              activeOpacity={0.82}
             >
-              {item.status}
-            </Text>
-          </View>
-        ))}
-      </View>
+              <Text style={styles.aiSuggestionText}>{item}</Text>
+              <Ionicons
+                name="arrow-forward"
+                size={17}
+                color={C.purple}
+              />
+            </TouchableOpacity>
+          ))}
 
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View>
-            <Text style={styles.cardTitle}>Resource Library</Text>
-            <Text style={styles.cardSubtitle}>Learning materials from professors</Text>
-          </View>
-          <Ionicons name="library-outline" size={24} color="#F59E0B" />
-        </View>
-
-        {resources.map((item) => (
-          <View key={item.id} style={styles.resourceCard}>
-            <View style={styles.resourceIcon}>
-              <Text style={styles.resourceType}>{item.type}</Text>
-            </View>
-
-            <View style={{ flex: 1 }}>
-              <Text style={styles.resourceTitle}>{item.title}</Text>
-              <Text style={styles.resourceSubject}>{item.subject}</Text>
-            </View>
-
-            <Ionicons name="download-outline" size={22} color="#60A5FA" />
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.aiCard}>
-        <View style={styles.cardHeader}>
-          <View>
-            <Text style={styles.cardTitle}>SyncTrack AI Assistant</Text>
-            <Text style={styles.aiSubtitle}>Ask for project help, explanations, or debugging support</Text>
-          </View>
-          <Ionicons name="sparkles-outline" size={26} color="#DBEAFE" />
-        </View>
-
-        {aiSuggestions.map((item, index) => (
           <TouchableOpacity
-            key={index}
-            style={styles.aiSuggestion}
-            onPress={() => router.push(`/ai?prompt=${encodeURIComponent(item)}`)}
+            style={styles.aiButton}
+            onPress={() => router.push("/ai")}
+            activeOpacity={0.86}
           >
-            <Text style={styles.aiSuggestionText}>{item}</Text>
-            <Ionicons name="arrow-forward-outline" size={18} color="#DBEAFE" />
+            <Text style={styles.aiButtonText}>Open AI Assistant</Text>
+            <Ionicons name="sparkles" size={17} color={C.white} />
           </TouchableOpacity>
-        ))}
+        </View>
 
-        <TouchableOpacity style={styles.aiButton} onPress={() => router.push("/ai")}>
-          <Text style={styles.aiButtonText}>Open AI Assistant</Text>
-        </TouchableOpacity>
+        <View style={{ height: 120 }} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function SectionCard({
+  title,
+  subtitle,
+  icon,
+  iconColor,
+  iconBackground,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  iconBackground: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View>
+          <Text style={styles.cardTitle}>{title}</Text>
+          <Text style={styles.cardSubtitle}>{subtitle}</Text>
+        </View>
+
+        <View style={[styles.headerIcon, { backgroundColor: iconBackground }]}>
+          <Ionicons name={icon} size={23} color={iconColor} />
+        </View>
       </View>
 
-      <View style={{ height: 110 }} />
-    </ScrollView>
+      {children}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: C.bg,
+  },
+
   container: {
     flex: 1,
-    backgroundColor: "#0B1120",
-    padding: 20,
+    backgroundColor: C.bg,
   },
-  pageTitle: {
-    color: "#F8FAFC",
-    fontSize: 34,
+
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+
+  eyebrow: {
+    color: C.primaryDark,
+    fontSize: 11,
     fontWeight: "900",
-    marginTop: 8,
+    letterSpacing: 1,
   },
+
+  pageTitle: {
+    color: C.text,
+    fontSize: 32,
+    lineHeight: 39,
+    fontWeight: "900",
+    marginTop: 3,
+  },
+
   subtitle: {
-    color: "#94A3B8",
-    marginTop: 8,
-    marginBottom: 20,
-    lineHeight: 22,
+    color: C.secondary,
+    marginTop: 6,
+    marginBottom: 22,
+    lineHeight: 21,
+    fontSize: 13,
   },
+
   card: {
-    backgroundColor: "#111827",
+    backgroundColor: C.card,
     borderWidth: 1,
-    borderColor: "#1E293B",
+    borderColor: C.border,
     borderRadius: 24,
-    padding: 18,
+    padding: 17,
     marginBottom: 20,
+    shadowColor: "#1D2939",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 3,
   },
-  aiCard: {
-    backgroundColor: "#172554",
-    borderWidth: 1,
-    borderColor: "#2563EB",
-    borderRadius: 24,
-    padding: 18,
-    marginBottom: 20,
-  },
+
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 16,
+    alignItems: "flex-start",
+    marginBottom: 14,
   },
+
   cardTitle: {
-    color: "#F8FAFC",
-    fontSize: 21,
+    color: C.text,
+    fontSize: 19,
     fontWeight: "900",
   },
+
   cardSubtitle: {
-    color: "#94A3B8",
+    color: C.secondary,
     marginTop: 4,
-    fontSize: 13,
+    fontSize: 12,
   },
-  aiSubtitle: {
-    color: "#DBEAFE",
-    marginTop: 4,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  messageCard: {
-    backgroundColor: "#020617",
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "#2563EB",
+
+  headerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: {
-    color: "#FFFFFF",
-    fontWeight: "900",
-    fontSize: 18,
+
+  messageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: C.divider,
   },
+
+  avatarWrap: {
+    marginRight: 12,
+  },
+
+  avatar: {
+    width: 45,
+    height: 45,
+    borderRadius: 23,
+    backgroundColor: C.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  avatarText: {
+    color: C.white,
+    fontWeight: "900",
+    fontSize: 17,
+  },
+
+  onlineDot: {
+    position: "absolute",
+    right: -1,
+    bottom: 1,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: C.card,
+  },
+
+  flex: {
+    flex: 1,
+  },
+
   rowBetween: {
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 8,
   },
+
   messageName: {
-    color: "#F8FAFC",
+    color: C.text,
     fontWeight: "900",
-    fontSize: 15,
+    fontSize: 14,
   },
+
   timeText: {
-    color: "#64748B",
-    fontSize: 11,
+    color: C.muted,
+    fontSize: 10,
     fontWeight: "700",
   },
+
   roleText: {
-    color: "#60A5FA",
-    fontSize: 12,
+    color: C.primaryDark,
+    fontSize: 11,
     marginTop: 2,
     fontWeight: "700",
   },
+
   previewText: {
-    color: "#94A3B8",
+    color: C.secondary,
     marginTop: 4,
-    fontSize: 13,
+    fontSize: 12,
+    paddingRight: 8,
   },
+
   unreadBadge: {
-    backgroundColor: "#EF4444",
-    width: 24,
-    height: 24,
+    backgroundColor: C.danger,
+    minWidth: 23,
+    height: 23,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 6,
+    marginLeft: 7,
   },
+
   unreadText: {
-    color: "#FFFFFF",
-    fontSize: 12,
+    color: C.white,
+    fontSize: 11,
     fontWeight: "900",
   },
+
   uploadButton: {
-    backgroundColor: "#2563EB",
-    padding: 14,
-    borderRadius: 16,
+    backgroundColor: C.primary,
+    paddingVertical: 13,
+    borderRadius: 15,
     flexDirection: "row",
     gap: 8,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 8,
   },
+
   uploadText: {
-    color: "#FFFFFF",
+    color: C.white,
     fontWeight: "900",
+    fontSize: 13,
   },
-  fileCard: {
-    backgroundColor: "#020617",
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
+
+  fileRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: C.divider,
   },
+
+  fileIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: C.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+  },
+
   fileName: {
-    color: "#F8FAFC",
+    color: C.text,
     fontWeight: "900",
+    fontSize: 13,
   },
+
   fileMeta: {
-    color: "#94A3B8",
+    color: C.secondary,
     marginTop: 4,
-    fontSize: 12,
-  },
-  status: {
     fontSize: 11,
+  },
+
+  statusBadge: {
+    borderRadius: 13,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    marginLeft: 8,
+  },
+
+  statusText: {
+    fontSize: 10,
     fontWeight: "900",
   },
-  approved: {
-    color: "#22C55E",
-  },
-  pending: {
-    color: "#F59E0B",
-  },
-  resourceCard: {
-    backgroundColor: "#020617",
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
+
+  resourceRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: C.divider,
   },
-  resourceIcon: {
-    backgroundColor: "#1E293B",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 12,
+
+  resourceTypeBox: {
+    minWidth: 48,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: C.warningLight,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    marginRight: 11,
   },
+
   resourceType: {
-    color: "#F8FAFC",
-    fontSize: 11,
+    color: C.warning,
+    fontSize: 10,
     fontWeight: "900",
   },
+
   resourceTitle: {
-    color: "#F8FAFC",
+    color: C.text,
+    fontWeight: "900",
+    fontSize: 13,
+  },
+
+  resourceSubject: {
+    color: C.secondary,
+    marginTop: 4,
+    fontSize: 11,
+  },
+
+  downloadButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: C.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  lastRow: {
+    borderBottomWidth: 0,
+  },
+
+  aiCard: {
+    backgroundColor: C.purpleLight,
+    borderWidth: 1,
+    borderColor: "#DED7FF",
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 20,
+  },
+
+  aiHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 15,
+  },
+
+  aiHeaderIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: C.card,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+
+  aiTitle: {
+    color: C.text,
+    fontSize: 18,
     fontWeight: "900",
   },
-  resourceSubject: {
-    color: "#94A3B8",
+
+  aiSubtitle: {
+    color: C.secondary,
     marginTop: 4,
     fontSize: 12,
+    lineHeight: 18,
   },
+
   aiSuggestion: {
-    backgroundColor: "#1E3A8A",
+    backgroundColor: C.card,
     borderWidth: 1,
-    borderColor: "#2563EB",
-    padding: 14,
-    borderRadius: 16,
-    marginBottom: 10,
+    borderColor: "#E2DEFF",
+    paddingVertical: 12,
+    paddingHorizontal: 13,
+    borderRadius: 14,
+    marginBottom: 9,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 10,
   },
+
   aiSuggestionText: {
-    color: "#DBEAFE",
-    fontWeight: "800",
+    color: C.text,
+    fontWeight: "700",
+    fontSize: 12,
     flex: 1,
   },
+
   aiButton: {
-    backgroundColor: "#DBEAFE",
-    padding: 14,
-    borderRadius: 16,
-    marginTop: 8,
+    backgroundColor: C.purple,
+    paddingVertical: 13,
+    paddingHorizontal: 15,
+    borderRadius: 15,
+    marginTop: 5,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
   },
+
   aiButtonText: {
-    color: "#172554",
-    textAlign: "center",
+    color: C.white,
     fontWeight: "900",
+    fontSize: 13,
   },
 });
