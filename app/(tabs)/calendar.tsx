@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Calendar, DateData } from "react-native-calendars";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 
 import { useAuth } from "../../context/AuthContext";
@@ -46,7 +50,8 @@ type CalendarItemType =
   | "deadline"
   | "update"
   | "class"
-  | "meeting";
+  | "meeting"
+  | "task";
 
 type CalendarItem = {
   id: string;
@@ -61,6 +66,16 @@ type CalendarItem = {
   studentName?: string;
   progress?: number;
   status?: string;
+  completed?: boolean;
+};
+
+type PersonalTask = {
+  id: string;
+  date: string;
+  title: string;
+  notes: string;
+  time: string;
+  completed: boolean;
 };
 
 type ClassSchedule = {
@@ -89,18 +104,6 @@ const COLORS = {
   red: "#EF5350",
 };
 
-/*
-  0 = Sunday
-  1 = Monday
-  2 = Tuesday
-  3 = Wednesday
-  4 = Thursday
-  5 = Friday
-  6 = Saturday
-
-  This array controls recurring classes. You can later load it
-  from MongoDB, Firestore or Google Sheets.
-*/
 const CLASS_SCHEDULE: ClassSchedule[] = [
   {
     id: "class-application-design",
@@ -135,7 +138,6 @@ function formatDateObject(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-
   return `${year}-${month}-${day}`;
 }
 
@@ -149,9 +151,7 @@ function parseLocalDate(dateString: string): Date {
 
 function isValidDate(dateString?: string): boolean {
   if (!dateString) return false;
-
   const parsedDate = parseLocalDate(dateString);
-
   return !Number.isNaN(parsedDate.getTime());
 }
 
@@ -193,61 +193,28 @@ function getItemColor(type: CalendarItemType): string {
   switch (type) {
     case "deadline":
       return COLORS.cyan;
-
     case "update":
       return COLORS.green;
-
     case "class":
       return COLORS.orange;
-
     case "meeting":
       return COLORS.purple;
-
+    case "task":
+      return COLORS.blue;
     default:
       return COLORS.blue;
   }
 }
 
-function getItemIcon(
-  type: CalendarItemType
-): keyof typeof Ionicons.glyphMap {
-  switch (type) {
-    case "deadline":
-      return "flag-outline";
-
-    case "update":
-      return "checkmark-circle-outline";
-
-    case "class":
-      return "school-outline";
-
-    case "meeting":
-      return "people-outline";
-
-    default:
-      return "calendar-outline";
-  }
-}
-
-function convertTimestampToDate(
-  timestamp?: string
-): string | null {
+function convertTimestampToDate(timestamp?: string): string | null {
   if (!timestamp) return null;
 
   const trimmedTimestamp = timestamp.trim();
+  const isoMatch = trimmedTimestamp.match(/^\d{4}-\d{2}-\d{2}/);
 
-  const isoMatch = trimmedTimestamp.match(
-    /^\d{4}-\d{2}-\d{2}/
-  );
+  if (isoMatch) return isoMatch[0];
 
-  if (isoMatch) {
-    return isoMatch[0];
-  }
-
-  const datePart = trimmedTimestamp
-    .split(/[,\s]+/)[0]
-    .trim();
-
+  const datePart = trimmedTimestamp.split(/[,\s]+/)[0].trim();
   const parts = datePart.split(/[/-]/);
 
   if (parts.length === 3) {
@@ -284,9 +251,7 @@ function convertTimestampToDate(
 
   const parsedDate = new Date(trimmedTimestamp);
 
-  if (Number.isNaN(parsedDate.getTime())) {
-    return null;
-  }
+  if (Number.isNaN(parsedDate.getTime())) return null;
 
   return formatDateObject(parsedDate);
 }
@@ -330,18 +295,39 @@ export default function CalendarScreen() {
   const { width } = useWindowDimensions();
 
   const [projects, setProjects] = useState<Project[]>([]);
+  const [personalTasks, setPersonalTasks] = useState<PersonalTask[]>([]);
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [visibleMonth, setVisibleMonth] = useState(getToday());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [taskModalVisible, setTaskModalVisible] = useState(false);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskTime, setTaskTime] = useState("");
+  const [taskNotes, setTaskNotes] = useState("");
 
   const isWideScreen = width >= 700;
   const isProfessor = user?.role === "professor";
 
+  const userName =
+    user?.name ||
+    user?.email?.split("@")[0] ||
+    (isProfessor ? "Professor" : "Student");
+
+  const taskStorageKey = `synctrack-calendar-tasks-${
+    user?.uid || user?.email || "guest"
+  }`;
+
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  useEffect(() => {
+    loadPersonalTasks();
+  }, [taskStorageKey]);
+
   async function loadProjects() {
     try {
       const response = await fetchProjects();
-
       setProjects(Array.isArray(response) ? response : []);
     } catch (error) {
       console.log("Calendar project loading error:", error);
@@ -352,9 +338,93 @@ export default function CalendarScreen() {
     }
   }
 
-  useEffect(() => {
-    loadProjects();
-  }, []);
+  async function loadPersonalTasks() {
+    try {
+      const savedTasks = await AsyncStorage.getItem(taskStorageKey);
+
+      if (!savedTasks) {
+        setPersonalTasks([]);
+        return;
+      }
+
+      const parsedTasks: PersonalTask[] = JSON.parse(savedTasks);
+      setPersonalTasks(Array.isArray(parsedTasks) ? parsedTasks : []);
+    } catch (error) {
+      console.log("Task loading error:", error);
+      setPersonalTasks([]);
+    }
+  }
+
+  async function savePersonalTasks(tasks: PersonalTask[]) {
+    try {
+      setPersonalTasks(tasks);
+      await AsyncStorage.setItem(
+        taskStorageKey,
+        JSON.stringify(tasks)
+      );
+    } catch (error) {
+      console.log("Task saving error:", error);
+      Alert.alert("Save failed", "The task could not be saved.");
+    }
+  }
+
+  async function addPersonalTask() {
+    const cleanTitle = taskTitle.trim();
+
+    if (!cleanTitle) {
+      Alert.alert(
+        "Task title required",
+        "Please enter a title for the task."
+      );
+      return;
+    }
+
+    const newTask: PersonalTask = {
+      id: `task-${Date.now()}`,
+      date: selectedDate,
+      title: cleanTitle,
+      notes: taskNotes.trim(),
+      time: taskTime.trim(),
+      completed: false,
+    };
+
+    await savePersonalTasks([...personalTasks, newTask]);
+
+    setTaskTitle("");
+    setTaskTime("");
+    setTaskNotes("");
+    setTaskModalVisible(false);
+  }
+
+  async function togglePersonalTask(taskId: string) {
+    const updatedTasks = personalTasks.map((task) =>
+      task.id === taskId
+        ? { ...task, completed: !task.completed }
+        : task
+    );
+
+    await savePersonalTasks(updatedTasks);
+  }
+
+  function confirmDeleteTask(taskId: string) {
+    Alert.alert(
+      "Delete task",
+      "Are you sure you want to delete this task?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const updatedTasks = personalTasks.filter(
+              (task) => task.id !== taskId
+            );
+            await savePersonalTasks(updatedTasks);
+          },
+        },
+      ]
+    );
+  }
 
   const enhancedProjects: CalendarProject[] = useMemo(() => {
     return projects.map((project) => ({
@@ -384,24 +454,17 @@ export default function CalendarScreen() {
       });
     }
 
-    const studentProjects = enhancedProjects.filter(
-      (project) => {
-        const studentName = normalize(project.studentName);
-        const studentEmail = normalize(project.studentEmail);
+    const studentProjects = enhancedProjects.filter((project) => {
+      const studentName = normalize(project.studentName);
+      const studentEmail = normalize(project.studentEmail);
 
-        return (
-          studentName === currentName ||
-          (studentEmail !== "" &&
-            studentEmail === currentEmail)
-        );
-      }
-    );
+      return (
+        studentName === currentName ||
+        (studentEmail !== "" &&
+          studentEmail === currentEmail)
+      );
+    });
 
-    /*
-      This fallback lets the student see projects while your
-      Google Sheet does not yet include student email.
-      Remove the fallback after adding Student Email to the form.
-    */
     return studentProjects.length > 0
       ? studentProjects
       : enhancedProjects;
@@ -496,12 +559,30 @@ export default function CalendarScreen() {
     return createMonthlyClassItems(visibleMonth);
   }, [visibleMonth]);
 
+  const personalTaskItems: CalendarItem[] = useMemo(() => {
+    return personalTasks.map((task) => ({
+      id: task.id,
+      date: task.date,
+      title: task.title,
+      subtitle: task.notes || "Personal task",
+      type: "task",
+      time: task.time || undefined,
+      completed: task.completed,
+      status: task.completed ? "Completed" : "Pending",
+    }));
+  }, [personalTasks]);
+
   const allCalendarItems = useMemo(() => {
     return [
       ...projectCalendarItems,
       ...monthlyClassItems,
+      ...personalTaskItems,
     ];
-  }, [monthlyClassItems, projectCalendarItems]);
+  }, [
+    monthlyClassItems,
+    personalTaskItems,
+    projectCalendarItems,
+  ]);
 
   const selectedEvents = useMemo(() => {
     return projectCalendarItems.filter(
@@ -515,16 +596,23 @@ export default function CalendarScreen() {
     );
   }, [monthlyClassItems, selectedDate]);
 
-  const selectedAgendaItems = useMemo(() => {
-    return [...selectedEvents, ...selectedClasses].sort(
-      (first, second) => {
-        const firstTime = first.time || "23:59";
-        const secondTime = second.time || "23:59";
-
-        return firstTime.localeCompare(secondTime);
-      }
+  const selectedTasks = useMemo(() => {
+    return personalTaskItems.filter(
+      (item) => item.date === selectedDate
     );
-  }, [selectedClasses, selectedEvents]);
+  }, [personalTaskItems, selectedDate]);
+
+  const selectedAgendaItems = useMemo(() => {
+    return [
+      ...selectedEvents,
+      ...selectedClasses,
+      ...selectedTasks,
+    ].sort((first, second) => {
+      const firstTime = first.time || "23:59";
+      const secondTime = second.time || "23:59";
+      return firstTime.localeCompare(secondTime);
+    });
+  }, [selectedClasses, selectedEvents, selectedTasks]);
 
   const deadlineCount = selectedEvents.filter(
     (item) => item.type === "deadline"
@@ -535,15 +623,14 @@ export default function CalendarScreen() {
   ).length;
 
   const classCount = selectedClasses.length;
+  const taskCount = selectedTasks.length;
 
   const markedDates = useMemo(() => {
     const result: Record<string, any> = {};
 
     allCalendarItems.forEach((item) => {
       if (!result[item.date]) {
-        result[item.date] = {
-          dots: [],
-        };
+        result[item.date] = { dots: [] };
       }
 
       const color = getItemColor(item.type);
@@ -573,11 +660,6 @@ export default function CalendarScreen() {
     return result;
   }, [allCalendarItems, selectedDate]);
 
-  const userName =
-    user?.name ||
-    user?.email?.split("@")[0] ||
-    (isProfessor ? "Professor" : "Student");
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -594,255 +676,363 @@ export default function CalendarScreen() {
   }
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={[
-        styles.content,
-        isWideScreen && styles.wideContent,
-      ]}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          tintColor={COLORS.blue}
-          colors={[COLORS.blue]}
-          onRefresh={() => {
-            setRefreshing(true);
-            loadProjects();
-          }}
-        />
-      }
-    >
-      <View style={styles.pageHeader}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.pageTitle}>
-            Integrated Calendar.
-          </Text>
-
-          <Text style={styles.pageTitle}>
-            Stay Organized.
-          </Text>
-
-          <Text style={styles.pageSubtitle}>
-            Keep projects, progress updates and classes
-            together in one organized schedule.
-          </Text>
-        </View>
-
-        <View style={styles.profileCircle}>
-          <Text style={styles.profileText}>
-            {getInitials(userName)}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.phoneCard}>
-        <View style={styles.calendarHeader}>
-          <TouchableOpacity
-            style={styles.iconButton}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="menu-outline"
-              size={25}
-              color={COLORS.text}
-            />
-          </TouchableOpacity>
-
-          <Text style={styles.monthText}>
-            {formatMonthYear(visibleMonth)}
-          </Text>
-
-          <TouchableOpacity
-            style={styles.iconButton}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="ellipsis-vertical"
-              size={22}
-              color={COLORS.text}
-            />
-          </TouchableOpacity>
-        </View>
-
-        <Calendar
-          current={visibleMonth}
-          markingType="multi-dot"
-          markedDates={markedDates}
-          enableSwipeMonths
-          hideArrows
-          hideExtraDays={false}
-          firstDay={0}
-          onDayPress={(day: DateData) => {
-            setSelectedDate(day.dateString);
-          }}
-          onMonthChange={(month: DateData) => {
-            setVisibleMonth(month.dateString);
-          }}
-          style={styles.calendar}
-          theme={{
-            backgroundColor: COLORS.card,
-            calendarBackground: COLORS.card,
-
-            textSectionTitleColor: COLORS.muted,
-            textSectionTitleDisabledColor: COLORS.faint,
-
-            selectedDayBackgroundColor: COLORS.blue,
-            selectedDayTextColor: "#FFFFFF",
-
-            todayTextColor: COLORS.blue,
-            todayBackgroundColor: COLORS.blueSoft,
-
-            dayTextColor: COLORS.text,
-            textDisabledColor: "#D4D4DF",
-
-            dotColor: COLORS.cyan,
-            selectedDotColor: "#FFFFFF",
-
-            arrowColor: COLORS.blue,
-            monthTextColor: COLORS.text,
-
-            textDayFontSize: 15,
-            textMonthFontSize: 20,
-            textDayHeaderFontSize: 12,
-
-            textDayFontWeight: "600",
-            textMonthFontWeight: "800",
-            textDayHeaderFontWeight: "700",
-          }}
-        />
-
-        <View style={styles.divider} />
-
-                <View style={styles.legendCard}>
-        <LegendItem
-          color={COLORS.cyan}
-          label="Project deadline"
-        />
-
-        <LegendItem
-          color={COLORS.green}
-          label="Submitted update"
-        />
-
-        <LegendItem
-          color={COLORS.orange}
-          label="Class"
-        />
-      </View>
-        <View style={styles.agendaHeader}>
-          <View>
-            <Text style={styles.agendaEyebrow}>
-              DAILY AGENDA
+    <>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={[
+          styles.content,
+          isWideScreen && styles.wideContent,
+        ]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={COLORS.blue}
+            colors={[COLORS.blue]}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadProjects();
+            }}
+          />
+        }
+      >
+        <View style={styles.pageHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pageTitle}>
+              Integrated Calendar.
             </Text>
 
-            <Text style={styles.agendaDate}>
-              {formatSelectedDate(selectedDate)}
+            <Text style={styles.pageTitle}>
+              Stay Organized.
+            </Text>
+
+            <Text style={styles.pageSubtitle}>
+              Keep projects, updates, classes and personal tasks
+              together in one organized schedule.
             </Text>
           </View>
 
-          <View style={styles.totalBadge}>
-            <Text style={styles.totalBadgeNumber}>
-              {selectedAgendaItems.length}
-            </Text>
-
-            <Text style={styles.totalBadgeLabel}>
-              {selectedAgendaItems.length === 1
-                ? "item"
-                : "items"}
+          <View style={styles.profileCircle}>
+            <Text style={styles.profileText}>
+              {getInitials(userName)}
             </Text>
           </View>
         </View>
 
-        <View style={styles.agendaStats}>
-          <AgendaStat
-            icon="flag-outline"
-            label="Deadlines"
-            value={deadlineCount}
-            color={COLORS.cyan}
-          />
-
-          <AgendaStat
-            icon="checkmark-circle-outline"
-            label="Updates"
-            value={updateCount}
-            color={COLORS.green}
-          />
-
-          <AgendaStat
-            icon="school-outline"
-            label="Classes"
-            value={classCount}
-            color={COLORS.orange}
-          />
-        </View>
-
-        {selectedAgendaItems.length === 0 ? (
-          <View style={styles.emptyAgenda}>
-            <View style={styles.emptyAgendaIcon}>
+        <View style={styles.phoneCard}>
+          <View style={styles.calendarHeader}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              activeOpacity={0.7}
+              onPress={() => {
+                setSelectedDate(getToday());
+                setVisibleMonth(getToday());
+              }}
+            >
               <Ionicons
-                name="calendar-clear-outline"
-                size={31}
-                color={COLORS.faint}
+                name="today-outline"
+                size={24}
+                color={COLORS.text}
               />
+            </TouchableOpacity>
+
+            <Text style={styles.monthText}>
+              {formatMonthYear(visibleMonth)}
+            </Text>
+
+            <TouchableOpacity
+              style={styles.iconButton}
+              activeOpacity={0.7}
+              onPress={() => setTaskModalVisible(true)}
+            >
+              <Ionicons
+                name="add-circle-outline"
+                size={24}
+                color={COLORS.blue}
+              />
+            </TouchableOpacity>
+          </View>
+
+          <Calendar
+            current={visibleMonth}
+            markingType="multi-dot"
+            markedDates={markedDates}
+            enableSwipeMonths
+            hideArrows
+            hideExtraDays={false}
+            firstDay={0}
+            onDayPress={(day: DateData) => {
+              setSelectedDate(day.dateString);
+            }}
+            onMonthChange={(month: DateData) => {
+              setVisibleMonth(month.dateString);
+            }}
+            style={styles.calendar}
+            theme={{
+              backgroundColor: COLORS.card,
+              calendarBackground: COLORS.card,
+              textSectionTitleColor: COLORS.muted,
+              textSectionTitleDisabledColor: COLORS.faint,
+              selectedDayBackgroundColor: COLORS.blue,
+              selectedDayTextColor: "#FFFFFF",
+              todayTextColor: COLORS.blue,
+              todayBackgroundColor: COLORS.blueSoft,
+              dayTextColor: COLORS.text,
+              textDisabledColor: "#D4D4DF",
+              dotColor: COLORS.cyan,
+              selectedDotColor: "#FFFFFF",
+              arrowColor: COLORS.blue,
+              monthTextColor: COLORS.text,
+              textDayFontSize: 15,
+              textMonthFontSize: 20,
+              textDayHeaderFontSize: 12,
+              textDayFontWeight: "600",
+              textMonthFontWeight: "800",
+              textDayHeaderFontWeight: "700",
+            }}
+          />
+
+          <View style={styles.divider} />
+
+          <View style={styles.legendCard}>
+            <LegendItem color={COLORS.cyan} label="Deadline" />
+            <LegendItem color={COLORS.green} label="Update" />
+            <LegendItem color={COLORS.orange} label="Class" />
+            <LegendItem color={COLORS.blue} label="Task" />
+          </View>
+
+          <View style={styles.agendaHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.agendaEyebrow}>
+                DAILY AGENDA
+              </Text>
+
+              <Text style={styles.agendaDate}>
+                {formatSelectedDate(selectedDate)}
+              </Text>
             </View>
 
-            <Text style={styles.emptyAgendaTitle}>
-              Your day is clear
+            <View style={styles.agendaActions}>
+              <TouchableOpacity
+                style={styles.addTaskButton}
+                onPress={() => setTaskModalVisible(true)}
+              >
+                <Ionicons
+                  name="add-outline"
+                  size={18}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.addTaskButtonText}>
+                  Add task
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.totalBadge}>
+                <Text style={styles.totalBadgeNumber}>
+                  {selectedAgendaItems.length}
+                </Text>
+
+                <Text style={styles.totalBadgeLabel}>
+                  {selectedAgendaItems.length === 1
+                    ? "item"
+                    : "items"}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.agendaStats}>
+            <AgendaStat
+              icon="flag-outline"
+              label="Deadlines"
+              value={deadlineCount}
+              color={COLORS.cyan}
+            />
+
+            <AgendaStat
+              icon="checkmark-circle-outline"
+              label="Updates"
+              value={updateCount}
+              color={COLORS.green}
+            />
+
+            <AgendaStat
+              icon="school-outline"
+              label="Classes"
+              value={classCount}
+              color={COLORS.orange}
+            />
+
+            <AgendaStat
+              icon="checkbox-outline"
+              label="Tasks"
+              value={taskCount}
+              color={COLORS.blue}
+            />
+          </View>
+
+          {selectedAgendaItems.length === 0 ? (
+            <View style={styles.emptyAgenda}>
+              <View style={styles.emptyAgendaIcon}>
+                <Ionicons
+                  name="calendar-clear-outline"
+                  size={31}
+                  color={COLORS.faint}
+                />
+              </View>
+
+              <Text style={styles.emptyAgendaTitle}>
+                Your day is clear
+              </Text>
+
+              <Text style={styles.emptyAgendaText}>
+                There are no classes, project updates, deadlines
+                or personal tasks scheduled for this date.
+              </Text>
+
+              <TouchableOpacity
+                style={styles.emptyAddButton}
+                onPress={() => setTaskModalVisible(true)}
+              >
+                <Ionicons
+                  name="add-outline"
+                  size={18}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.emptyAddButtonText}>
+                  Add your first task
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.timelineCard}>
+              {selectedAgendaItems.map((item, index) => (
+                <AgendaItem
+                  key={item.id}
+                  item={item}
+                  isLast={
+                    index === selectedAgendaItems.length - 1
+                  }
+                  onToggleTask={togglePersonalTask}
+                  onDeleteTask={confirmDeleteTask}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryIcon}>
+            <Ionicons
+              name="calendar-outline"
+              size={24}
+              color={COLORS.blue}
+            />
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={styles.summaryTitle}>
+              Calendar overview
             </Text>
 
-            <Text style={styles.emptyAgendaText}>
-              There are no classes, project updates or
-              deadlines scheduled for this date.
+            <Text style={styles.summaryText}>
+              {visibleProjects.length} project
+              {visibleProjects.length === 1 ? "" : "s"},{" "}
+              {projectCalendarItems.length} project event
+              {projectCalendarItems.length === 1 ? "" : "s"},{" "}
+              {monthlyClassItems.length} recurring class
+              {monthlyClassItems.length === 1 ? "" : "es"} and{" "}
+              {personalTasks.length} personal task
+              {personalTasks.length === 1 ? "" : "s"} are available.
             </Text>
           </View>
-        ) : (
-          <View style={styles.timelineCard}>
-            {selectedAgendaItems.map((item, index) => (
-              <AgendaItem
-                key={item.id}
-                item={item}
-                isLast={
-                  index === selectedAgendaItems.length - 1
-                }
+        </View>
+
+        <View style={{ height: 120 }} />
+      </ScrollView>
+
+      <Modal
+        visible={taskModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTaskModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.taskModal}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalEyebrow}>
+                  NEW TASK
+                </Text>
+
+                <Text style={styles.modalTitle}>
+                  {formatSelectedDate(selectedDate)}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.modalClose}
+                onPress={() => setTaskModalVisible(false)}
+              >
+                <Ionicons
+                  name="close-outline"
+                  size={24}
+                  color={COLORS.text}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.inputLabel}>Task title</Text>
+
+            <TextInput
+              style={styles.taskInput}
+              placeholder="Example: Complete project report"
+              placeholderTextColor={COLORS.faint}
+              value={taskTitle}
+              onChangeText={setTaskTitle}
+              autoFocus
+            />
+
+            <Text style={styles.inputLabel}>Time</Text>
+
+            <TextInput
+              style={styles.taskInput}
+              placeholder="Example: 2:30 PM"
+              placeholderTextColor={COLORS.faint}
+              value={taskTime}
+              onChangeText={setTaskTime}
+            />
+
+            <Text style={styles.inputLabel}>Notes</Text>
+
+            <TextInput
+              style={[styles.taskInput, styles.notesInput]}
+              placeholder="Add optional notes..."
+              placeholderTextColor={COLORS.faint}
+              value={taskNotes}
+              onChangeText={setTaskNotes}
+              multiline
+              textAlignVertical="top"
+            />
+
+            <TouchableOpacity
+              style={styles.saveTaskButton}
+              onPress={addPersonalTask}
+            >
+              <Ionicons
+                name="checkmark-outline"
+                size={20}
+                color="#FFFFFF"
               />
-            ))}
+
+              <Text style={styles.saveTaskButtonText}>
+                Add task
+              </Text>
+            </TouchableOpacity>
           </View>
-        )}
-      </View>
-
-
-
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryIcon}>
-          <Ionicons
-            name="calendar-outline"
-            size={24}
-            color={COLORS.blue}
-          />
         </View>
-
-        <View style={{ flex: 1 }}>
-          <Text style={styles.summaryTitle}>
-            Calendar overview
-          </Text>
-
-          <Text style={styles.summaryText}>
-            {visibleProjects.length} project
-            {visibleProjects.length === 1 ? "" : "s"},{" "}
-            {projectCalendarItems.length} calendar event
-            {projectCalendarItems.length === 1
-              ? ""
-              : "s"}{" "}
-            and {monthlyClassItems.length} recurring class
-            {monthlyClassItems.length === 1 ? "" : "es"}{" "}
-            are currently available.
-          </Text>
-        </View>
-      </View>
-
-      <View style={{ height: 120 }} />
-    </ScrollView>
+      </Modal>
+    </>
   );
 }
 
@@ -862,9 +1052,7 @@ function AgendaStat({
       <View
         style={[
           styles.agendaStatIcon,
-          {
-            backgroundColor: `${color}18`,
-          },
+          { backgroundColor: `${color}18` },
         ]}
       >
         <Ionicons
@@ -874,13 +1062,8 @@ function AgendaStat({
         />
       </View>
 
-      <Text style={styles.agendaStatValue}>
-        {value}
-      </Text>
-
-      <Text style={styles.agendaStatLabel}>
-        {label}
-      </Text>
+      <Text style={styles.agendaStatValue}>{value}</Text>
+      <Text style={styles.agendaStatLabel}>{label}</Text>
     </View>
   );
 }
@@ -888,9 +1071,13 @@ function AgendaStat({
 function AgendaItem({
   item,
   isLast,
+  onToggleTask,
+  onDeleteTask,
 }: {
   item: CalendarItem;
   isLast: boolean;
+  onToggleTask: (taskId: string) => void;
+  onDeleteTask: (taskId: string) => void;
 }) {
   const color = getItemColor(item.type);
 
@@ -898,10 +1085,12 @@ function AgendaItem({
     item.type === "deadline"
       ? "Project deadline"
       : item.type === "update"
-        ? "Progress update"
-        : item.type === "meeting"
-          ? "Meeting"
-          : "Class";
+      ? "Progress update"
+      : item.type === "meeting"
+      ? "Meeting"
+      : item.type === "task"
+      ? "Personal task"
+      : "Class";
 
   return (
     <TouchableOpacity
@@ -916,27 +1105,41 @@ function AgendaItem({
         }
       }}
     >
-      <View style={styles.timelineLeft}>
-        <View
+      {item.type === "task" ? (
+        <TouchableOpacity
           style={[
-            styles.timelineDot,
-            {
-              backgroundColor: color,
-            },
+            styles.taskCheckbox,
+            item.completed && styles.taskCheckboxCompleted,
           ]}
-        />
+          onPress={() => onToggleTask(item.id)}
+        >
+          {item.completed && (
+            <Ionicons
+              name="checkmark"
+              size={15}
+              color="#FFFFFF"
+            />
+          )}
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.timelineLeft}>
+          <View
+            style={[
+              styles.timelineDot,
+              { backgroundColor: color },
+            ]}
+          />
 
-        {!isLast && <View style={styles.timelineLine} />}
-      </View>
+          {!isLast && <View style={styles.timelineLine} />}
+        </View>
+      )}
 
       <View style={styles.timelineContent}>
         <View style={styles.timelineTop}>
           <Text
             style={[
               styles.timelineType,
-              {
-                color,
-              },
+              { color },
             ]}
           >
             {typeLabel}
@@ -949,7 +1152,12 @@ function AgendaItem({
           )}
         </View>
 
-        <Text style={styles.timelineTitle}>
+        <Text
+          style={[
+            styles.timelineTitle,
+            item.completed && styles.completedTaskTitle,
+          ]}
+        >
           {item.title}
         </Text>
 
@@ -985,10 +1193,32 @@ function AgendaItem({
               text={`${item.progress}%`}
             />
           )}
+
+          {item.type === "task" && (
+            <MetaPill
+              icon={
+                item.completed
+                  ? "checkmark-circle-outline"
+                  : "time-outline"
+              }
+              text={item.completed ? "Completed" : "Pending"}
+            />
+          )}
         </View>
       </View>
 
-      {item.projectId && (
+      {item.type === "task" ? (
+        <TouchableOpacity
+          style={styles.deleteTaskButton}
+          onPress={() => onDeleteTask(item.id)}
+        >
+          <Ionicons
+            name="trash-outline"
+            size={18}
+            color={COLORS.red}
+          />
+        </TouchableOpacity>
+      ) : item.projectId ? (
         <View style={styles.openButton}>
           <Ionicons
             name="chevron-forward"
@@ -996,7 +1226,7 @@ function AgendaItem({
             color={COLORS.blue}
           />
         </View>
-      )}
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -1038,15 +1268,11 @@ function LegendItem({
       <View
         style={[
           styles.legendDot,
-          {
-            backgroundColor: color,
-          },
+          { backgroundColor: color },
         ]}
       />
 
-      <Text style={styles.legendText}>
-        {label}
-      </Text>
+      <Text style={styles.legendText}>{label}</Text>
     </View>
   );
 }
@@ -1056,38 +1282,32 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-
   content: {
     paddingHorizontal: 18,
     paddingTop: 28,
   },
-
   wideContent: {
     width: "100%",
     maxWidth: 900,
     alignSelf: "center",
   },
-
   loadingContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
     justifyContent: "center",
     alignItems: "center",
   },
-
   loadingText: {
     color: COLORS.text,
     marginTop: 14,
     fontSize: 15,
     fontWeight: "700",
   },
-
   pageHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     marginBottom: 30,
   },
-
   pageTitle: {
     color: COLORS.text,
     fontSize: 35,
@@ -1095,7 +1315,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -1.2,
   },
-
   pageSubtitle: {
     color: COLORS.muted,
     fontSize: 14,
@@ -1103,7 +1322,6 @@ const styles = StyleSheet.create({
     marginTop: 11,
     maxWidth: 340,
   },
-
   profileCircle: {
     width: 48,
     height: 48,
@@ -1113,31 +1331,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginLeft: 12,
   },
-
   profileText: {
     color: "#FFFFFF",
     fontWeight: "900",
     fontSize: 16,
   },
-
   phoneCard: {
     backgroundColor: COLORS.card,
     borderRadius: 34,
     paddingHorizontal: 14,
     paddingTop: 18,
     paddingBottom: 22,
-
     shadowColor: "#73728A",
-    shadowOffset: {
-      width: 0,
-      height: 12,
-    },
+    shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.16,
     shadowRadius: 24,
-
     elevation: 8,
   },
-
   calendarHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1145,7 +1355,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingBottom: 8,
   },
-
   iconButton: {
     width: 42,
     height: 42,
@@ -1153,25 +1362,45 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
   monthText: {
     color: COLORS.text,
     fontSize: 21,
     fontWeight: "800",
   },
-
   calendar: {
     borderRadius: 24,
     overflow: "hidden",
   },
-
   divider: {
     height: 1,
     backgroundColor: COLORS.border,
     marginHorizontal: 4,
     marginTop: 8,
   },
-
+  legendCard: {
+    marginTop: 16,
+    backgroundColor: "#F8F8FC",
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  legendDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+  },
+  legendText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
   agendaHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1179,8 +1408,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     marginTop: 20,
     marginBottom: 16,
+    gap: 12,
   },
-
   agendaEyebrow: {
     color: COLORS.blue,
     fontSize: 10,
@@ -1188,50 +1417,63 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
     marginBottom: 5,
   },
-
   agendaDate: {
     color: COLORS.text,
-    fontSize: 21,
+    fontSize: 20,
     fontWeight: "900",
   },
-
-  totalBadge: {
-    minWidth: 64,
-    backgroundColor: COLORS.blueSoft,
-    borderRadius: 20,
+  agendaActions: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    gap: 8,
   },
-
+  addTaskButton: {
+    backgroundColor: COLORS.blue,
+    borderRadius: 16,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  addTaskButtonText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  totalBadge: {
+    minWidth: 56,
+    backgroundColor: COLORS.blueSoft,
+    borderRadius: 18,
+    alignItems: "center",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+  },
   totalBadgeNumber: {
     color: COLORS.blue,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "900",
   },
-
   totalBadgeLabel: {
     color: "#5D7DA4",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
   },
-
   agendaStats: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     marginBottom: 18,
     paddingHorizontal: 8,
   },
-
   agendaStat: {
-    flex: 1,
+    width: "48%",
     backgroundColor: "#F8F8FC",
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 18,
     padding: 12,
   },
-
   agendaStatIcon: {
     width: 34,
     height: 34,
@@ -1240,20 +1482,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 9,
   },
-
   agendaStatValue: {
     color: COLORS.text,
     fontSize: 20,
     fontWeight: "900",
   },
-
   agendaStatLabel: {
     color: COLORS.muted,
     fontSize: 11,
     fontWeight: "700",
     marginTop: 2,
   },
-
   timelineCard: {
     marginHorizontal: 8,
     backgroundColor: "#FFFFFF",
@@ -1263,7 +1502,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     marginBottom: 6,
   },
-
   timelineItem: {
     flexDirection: "row",
     alignItems: "stretch",
@@ -1271,17 +1509,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F5",
   },
-
   timelineItemLast: {
     borderBottomWidth: 0,
   },
-
   timelineLeft: {
     width: 24,
     alignItems: "center",
     marginRight: 10,
   },
-
   timelineDot: {
     width: 12,
     height: 12,
@@ -1289,7 +1524,6 @@ const styles = StyleSheet.create({
     marginTop: 5,
     zIndex: 2,
   },
-
   timelineLine: {
     position: "absolute",
     top: 17,
@@ -1297,52 +1531,63 @@ const styles = StyleSheet.create({
     width: 2,
     backgroundColor: "#E5E7EB",
   },
-
+  taskCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: COLORS.blue,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+    marginTop: 2,
+  },
+  taskCheckboxCompleted: {
+    backgroundColor: COLORS.green,
+    borderColor: COLORS.green,
+  },
   timelineContent: {
     flex: 1,
   },
-
   timelineTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 5,
   },
-
   timelineType: {
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
-
   timelineTime: {
     color: COLORS.muted,
     fontSize: 11,
     fontWeight: "700",
   },
-
   timelineTitle: {
     color: COLORS.text,
     fontSize: 17,
     lineHeight: 23,
     fontWeight: "900",
   },
-
+  completedTaskTitle: {
+    color: COLORS.muted,
+    textDecorationLine: "line-through",
+  },
   timelineSubtitle: {
     color: COLORS.muted,
     fontSize: 12,
     lineHeight: 18,
     marginTop: 4,
   },
-
   timelineMetaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 7,
     marginTop: 10,
   },
-
   metaPill: {
     maxWidth: "100%",
     flexDirection: "row",
@@ -1353,14 +1598,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
   },
-
   metaText: {
     color: "#74748A",
     fontSize: 10,
     fontWeight: "700",
     maxWidth: 150,
   },
-
   openButton: {
     width: 34,
     height: 34,
@@ -1371,7 +1614,16 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginLeft: 8,
   },
-
+  deleteTaskButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "#FEECEC",
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "center",
+    marginLeft: 8,
+  },
   emptyAgenda: {
     marginHorizontal: 8,
     backgroundColor: "#F8F8FC",
@@ -1382,7 +1634,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 6,
   },
-
   emptyAgendaIcon: {
     width: 60,
     height: 60,
@@ -1392,13 +1643,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 14,
   },
-
   emptyAgendaTitle: {
     color: COLORS.text,
     fontSize: 17,
     fontWeight: "900",
   },
-
   emptyAgendaText: {
     color: COLORS.muted,
     fontSize: 12,
@@ -1407,35 +1656,21 @@ const styles = StyleSheet.create({
     marginTop: 6,
     maxWidth: 280,
   },
-
-  legendCard: {
-    marginTop: 18,
-    backgroundColor: "rgba(255,255,255,0.78)",
-    borderRadius: 22,
-    padding: 16,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 16,
-  },
-
-  legendItem: {
+  emptyAddButton: {
+    marginTop: 16,
+    backgroundColor: COLORS.blue,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 6,
   },
-
-  legendDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-  },
-
-  legendText: {
-    color: COLORS.muted,
+  emptyAddButtonText: {
+    color: "#FFFFFF",
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "900",
   },
-
   summaryCard: {
     marginTop: 14,
     flexDirection: "row",
@@ -1445,7 +1680,6 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: 17,
   },
-
   summaryIcon: {
     width: 43,
     height: 43,
@@ -1454,17 +1688,92 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
   summaryTitle: {
     color: COLORS.text,
     fontSize: 15,
     fontWeight: "900",
   },
-
   summaryText: {
     color: COLORS.muted,
     fontSize: 12,
     lineHeight: 18,
     marginTop: 4,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(20,20,30,0.48)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  taskModal: {
+    backgroundColor: COLORS.card,
+    borderRadius: 28,
+    padding: 22,
+    shadowColor: "#444456",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.24,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 22,
+  },
+  modalEyebrow: {
+    color: COLORS.blue,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+    marginBottom: 5,
+  },
+  modalTitle: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  modalClose: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: COLORS.blueSoft,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 10,
+  },
+  inputLabel: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 7,
+  },
+  taskInput: {
+    backgroundColor: "#F7F7FC",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    color: COLORS.text,
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  notesInput: {
+    minHeight: 90,
+  },
+  saveTaskButton: {
+    backgroundColor: COLORS.blue,
+    borderRadius: 16,
+    paddingVertical: 14,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 7,
+  },
+  saveTaskButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "900",
   },
 });
