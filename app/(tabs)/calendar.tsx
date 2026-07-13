@@ -7,6 +7,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Calendar, DateData } from "react-native-calendars";
@@ -25,8 +26,18 @@ type ProjectStatus =
   | "Review"
   | "Attention";
 
-type ProjectWithStatus = Project & {
+type ProjectUpdate = {
+  id?: string;
+  timestamp?: string;
+  weekNumber?: string;
+  updateDetails?: string;
+  progress?: number;
+  studentName?: string;
+};
+
+type CalendarProject = Project & {
   status: ProjectStatus;
+  updates?: ProjectUpdate[];
   professorEmail?: string;
   studentEmail?: string;
 };
@@ -45,16 +56,37 @@ type CalendarItem = {
   type: CalendarItemType;
   time?: string;
   projectId?: string;
+  location?: string;
+  professor?: string;
+  studentName?: string;
+  progress?: number;
+  status?: string;
 };
 
 type ClassSchedule = {
   id: string;
   title: string;
-  subtitle: string;
+  room: string;
   startTime: string;
   endTime: string;
   dayOfWeek: number;
   color: string;
+};
+
+const COLORS = {
+  background: "#ECEBF7",
+  card: "#FFFFFF",
+  text: "#202027",
+  muted: "#858596",
+  faint: "#B7B7C5",
+  border: "#EBEBF3",
+  blue: "#1976D2",
+  blueSoft: "#E8F2FF",
+  green: "#7FC642",
+  orange: "#FF6534",
+  purple: "#8B5CF6",
+  cyan: "#29B6D8",
+  red: "#EF5350",
 };
 
 /*
@@ -66,62 +98,49 @@ type ClassSchedule = {
   5 = Friday
   6 = Saturday
 
-  You can later move this list to Google Sheets, Firestore,
-  MongoDB, or another API.
+  This array controls recurring classes. You can later load it
+  from MongoDB, Firestore or Google Sheets.
 */
 const CLASS_SCHEDULE: ClassSchedule[] = [
   {
-    id: "class-1",
+    id: "class-application-design",
     title: "Application Design and Development",
-    subtitle: "Room 301",
+    room: "Room 301",
     startTime: "9:30 AM",
     endTime: "11:00 AM",
     dayOfWeek: 1,
-    color: "#FF642E",
+    color: COLORS.orange,
   },
   {
-    id: "class-2",
+    id: "class-database",
     title: "Database Systems",
-    subtitle: "Computer Lab 2",
+    room: "Computer Lab 2",
     startTime: "11:00 AM",
     endTime: "12:30 PM",
     dayOfWeek: 3,
-    color: "#80C842",
+    color: COLORS.green,
   },
   {
-    id: "class-3",
+    id: "class-software-engineering",
     title: "Software Engineering",
-    subtitle: "Room 208",
+    room: "Room 208",
     startTime: "1:00 PM",
     endTime: "2:30 PM",
     dayOfWeek: 4,
-    color: "#1E88E5",
+    color: COLORS.blue,
   },
 ];
 
-const COLORS = {
-  background: "#EDECF8",
-  card: "#FFFFFF",
-  text: "#222227",
-  muted: "#898997",
-  faint: "#B7B7C4",
-  border: "#ECECF3",
-  blue: "#1976D2",
-  blueLight: "#E7F1FF",
-  green: "#80C842",
-  orange: "#FF642E",
-  purple: "#8B5CF6",
-  cyan: "#29B6D8",
-};
-
-function getToday(): string {
-  const now = new Date();
-
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
+function formatDateObject(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
+}
+
+function getToday(): string {
+  return formatDateObject(new Date());
 }
 
 function parseLocalDate(dateString: string): Date {
@@ -131,17 +150,16 @@ function parseLocalDate(dateString: string): Date {
 function isValidDate(dateString?: string): boolean {
   if (!dateString) return false;
 
-  const date = parseLocalDate(dateString);
+  const parsedDate = parseLocalDate(dateString);
 
-  return !Number.isNaN(date.getTime());
+  return !Number.isNaN(parsedDate.getTime());
 }
 
 function formatSelectedDate(dateString: string): string {
-  if (!isValidDate(dateString)) {
-    return dateString;
-  }
+  if (!isValidDate(dateString)) return dateString;
 
   return parseLocalDate(dateString).toLocaleDateString("en-US", {
+    weekday: "short",
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -159,6 +177,18 @@ function normalize(value?: string | null): string {
   return (value || "").trim().toLowerCase();
 }
 
+function getInitials(name?: string): string {
+  if (!name) return "U";
+
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 function getItemColor(type: CalendarItemType): string {
   switch (type) {
     case "deadline":
@@ -167,11 +197,11 @@ function getItemColor(type: CalendarItemType): string {
     case "update":
       return COLORS.green;
 
-    case "meeting":
-      return COLORS.purple;
-
     case "class":
       return COLORS.orange;
+
+    case "meeting":
+      return COLORS.purple;
 
     default:
       return COLORS.blue;
@@ -188,31 +218,116 @@ function getItemIcon(
     case "update":
       return "checkmark-circle-outline";
 
-    case "meeting":
-      return "people-outline";
-
     case "class":
       return "school-outline";
+
+    case "meeting":
+      return "people-outline";
 
     default:
       return "calendar-outline";
   }
 }
 
-function buildInitials(name?: string): string {
-  if (!name) return "U";
+function convertTimestampToDate(
+  timestamp?: string
+): string | null {
+  if (!timestamp) return null;
 
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const trimmedTimestamp = timestamp.trim();
+
+  const isoMatch = trimmedTimestamp.match(
+    /^\d{4}-\d{2}-\d{2}/
+  );
+
+  if (isoMatch) {
+    return isoMatch[0];
+  }
+
+  const datePart = trimmedTimestamp
+    .split(/[,\s]+/)[0]
+    .trim();
+
+  const parts = datePart.split(/[/-]/);
+
+  if (parts.length === 3) {
+    const first = Number(parts[0]);
+    const second = Number(parts[1]);
+    const third = Number(parts[2]);
+
+    let year: number;
+    let month: number;
+    let day: number;
+
+    if (parts[0].length === 4) {
+      year = first;
+      month = second;
+      day = third;
+    } else {
+      year = third;
+
+      if (first > 12) {
+        day = first;
+        month = second;
+      } else {
+        month = first;
+        day = second;
+      }
+    }
+
+    const converted = new Date(year, month - 1, day);
+
+    if (!Number.isNaN(converted.getTime())) {
+      return formatDateObject(converted);
+    }
+  }
+
+  const parsedDate = new Date(trimmedTimestamp);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return formatDateObject(parsedDate);
+}
+
+function createMonthlyClassItems(
+  monthDateString: string
+): CalendarItem[] {
+  const monthDate = parseLocalDate(monthDateString);
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+
+  const result: CalendarItem[] = [];
+  const cursor = new Date(year, month, 1);
+
+  while (cursor.getMonth() === month) {
+    const dateString = formatDateObject(cursor);
+    const dayOfWeek = cursor.getDay();
+
+    CLASS_SCHEDULE.filter(
+      (classItem) => classItem.dayOfWeek === dayOfWeek
+    ).forEach((classItem) => {
+      result.push({
+        id: `${classItem.id}-${dateString}`,
+        date: dateString,
+        title: classItem.title,
+        subtitle: classItem.room,
+        location: classItem.room,
+        type: "class",
+        time: `${classItem.startTime} – ${classItem.endTime}`,
+      });
+    });
+
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return result;
 }
 
 export default function CalendarScreen() {
   const { user } = useAuth();
+  const { width } = useWindowDimensions();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedDate, setSelectedDate] = useState(getToday());
@@ -220,14 +335,16 @@ export default function CalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const isWideScreen = width >= 700;
   const isProfessor = user?.role === "professor";
 
   async function loadProjects() {
     try {
-      const data = await fetchProjects();
-      setProjects(Array.isArray(data) ? data : []);
+      const response = await fetchProjects();
+
+      setProjects(Array.isArray(response) ? response : []);
     } catch (error) {
-      console.log("Calendar fetch error:", error);
+      console.log("Calendar project loading error:", error);
       setProjects([]);
     } finally {
       setLoading(false);
@@ -239,56 +356,52 @@ export default function CalendarScreen() {
     loadProjects();
   }, []);
 
-  const enhancedProjects: ProjectWithStatus[] = useMemo(() => {
+  const enhancedProjects: CalendarProject[] = useMemo(() => {
     return projects.map((project) => ({
       ...project,
       status: getProjectStatus(project.progress),
     }));
   }, [projects]);
 
-  /*
-    Role-aware filtering:
-
-    Professor:
-    - sees projects matching their name or professorEmail.
-
-    Student:
-    - sees projects matching their name or studentEmail.
-    - falls back to all projects when the sheet does not contain
-      student identity fields yet.
-  */
   const visibleProjects = useMemo(() => {
-    const userName = normalize(user?.name);
-    const userEmail = normalize(user?.email);
+    const currentName = normalize(user?.name);
+    const currentEmail = normalize(user?.email);
 
-    if (!userName && !userEmail) {
+    if (!currentName && !currentEmail) {
       return enhancedProjects;
     }
 
     if (isProfessor) {
-      const professorProjects = enhancedProjects.filter((project) => {
+      return enhancedProjects.filter((project) => {
         const professorName = normalize(project.professor);
         const professorEmail = normalize(project.professorEmail);
 
         return (
-          professorName === userName ||
-          (professorEmail !== "" && professorEmail === userEmail)
+          professorName === currentName ||
+          (professorEmail !== "" &&
+            professorEmail === currentEmail)
         );
       });
-
-      return professorProjects;
     }
 
-    const studentProjects = enhancedProjects.filter((project) => {
-      const studentName = normalize(project.studentName);
-      const studentEmail = normalize(project.studentEmail);
+    const studentProjects = enhancedProjects.filter(
+      (project) => {
+        const studentName = normalize(project.studentName);
+        const studentEmail = normalize(project.studentEmail);
 
-      return (
-        studentName === userName ||
-        (studentEmail !== "" && studentEmail === userEmail)
-      );
-    });
+        return (
+          studentName === currentName ||
+          (studentEmail !== "" &&
+            studentEmail === currentEmail)
+        );
+      }
+    );
 
+    /*
+      This fallback lets the student see projects while your
+      Google Sheet does not yet include student email.
+      Remove the fallback after adding Student Email to the form.
+    */
     return studentProjects.length > 0
       ? studentProjects
       : enhancedProjects;
@@ -299,7 +412,7 @@ export default function CalendarScreen() {
     user?.name,
   ]);
 
-  const projectItems: CalendarItem[] = useMemo(() => {
+  const projectCalendarItems = useMemo(() => {
     return visibleProjects.flatMap((project) => {
       const items: CalendarItem[] = [];
 
@@ -308,37 +421,48 @@ export default function CalendarScreen() {
           id: `deadline-${project.id}`,
           date: project.dueDate,
           title: project.title,
-          subtitle: `${project.subject} • ${project.progress}% complete`,
+          subtitle: `${project.subject} project deadline`,
           type: "deadline",
           projectId: project.id,
+          professor: project.professor,
+          studentName: project.studentName,
+          progress: project.progress,
+          status: project.status,
         });
       }
 
-      /*
-        If your grouped project contains updates[],
-        every submitted update is added to the calendar.
-      */
-      if (Array.isArray((project as any).updates)) {
-        (project as any).updates.forEach(
-          (update: any, index: number) => {
-            const updateDate = convertTimestampToDate(
-              update.timestamp
-            );
+      if (
+        Array.isArray(project.updates) &&
+        project.updates.length > 0
+      ) {
+        project.updates.forEach((update, index) => {
+          const updateDate = convertTimestampToDate(
+            update.timestamp
+          );
 
-            if (updateDate) {
-              items.push({
-                id: `update-${project.id}-${index}`,
-                date: updateDate,
-                title: `${project.title} update`,
-                subtitle:
-                  update.updateDetails ||
-                  `Week ${update.weekNumber || index + 1} update`,
-                type: "update",
-                projectId: project.id,
-              });
-            }
-          }
-        );
+          if (!updateDate) return;
+
+          items.push({
+            id:
+              update.id ||
+              `update-${project.id}-${index}`,
+            date: updateDate,
+            title: `${project.title} update`,
+            subtitle:
+              update.updateDetails ||
+              `Week ${
+                update.weekNumber || index + 1
+              } project update`,
+            type: "update",
+            projectId: project.id,
+            professor: project.professor,
+            studentName:
+              update.studentName || project.studentName,
+            progress:
+              update.progress ?? project.progress,
+            status: "Submitted",
+          });
+        });
       } else {
         const updateDate = convertTimestampToDate(
           project.timestamp
@@ -351,9 +475,15 @@ export default function CalendarScreen() {
             title: `${project.title} update`,
             subtitle:
               project.updateDetails ||
-              `Week ${project.weekNumber || ""} update`,
+              `Week ${
+                project.weekNumber || ""
+              } project update`,
             type: "update",
             projectId: project.id,
+            professor: project.professor,
+            studentName: project.studentName,
+            progress: project.progress,
+            status: "Submitted",
           });
         }
       }
@@ -362,77 +492,54 @@ export default function CalendarScreen() {
     });
   }, [visibleProjects]);
 
-  const classItems: CalendarItem[] = useMemo(() => {
-    const selected = parseLocalDate(selectedDate);
-    const selectedDay = selected.getDay();
-
-    return CLASS_SCHEDULE.filter(
-      (classItem) => classItem.dayOfWeek === selectedDay
-    ).map((classItem) => ({
-      id: `${classItem.id}-${selectedDate}`,
-      date: selectedDate,
-      title: classItem.title,
-      subtitle: classItem.subtitle,
-      type: "class",
-      time: `${classItem.startTime} • ${classItem.endTime}`,
-    }));
-  }, [selectedDate]);
-
-  /*
-    Add all recurring class markers for the visible month.
-  */
-  const monthlyClassItems: CalendarItem[] = useMemo(() => {
-    const monthDate = parseLocalDate(visibleMonth);
-    const year = monthDate.getFullYear();
-    const month = monthDate.getMonth();
-
-    const result: CalendarItem[] = [];
-
-    const current = new Date(year, month, 1);
-
-    while (current.getMonth() === month) {
-      const dateString = formatDateObject(current);
-      const dayOfWeek = current.getDay();
-
-      CLASS_SCHEDULE.filter(
-        (classItem) => classItem.dayOfWeek === dayOfWeek
-      ).forEach((classItem) => {
-        result.push({
-          id: `${classItem.id}-${dateString}`,
-          date: dateString,
-          title: classItem.title,
-          subtitle: classItem.subtitle,
-          type: "class",
-          time: `${classItem.startTime} • ${classItem.endTime}`,
-        });
-      });
-
-      current.setDate(current.getDate() + 1);
-    }
-
-    return result;
+  const monthlyClassItems = useMemo(() => {
+    return createMonthlyClassItems(visibleMonth);
   }, [visibleMonth]);
 
-  const allMarkedItems = useMemo(() => {
-    return [...projectItems, ...monthlyClassItems];
-  }, [projectItems, monthlyClassItems]);
+  const allCalendarItems = useMemo(() => {
+    return [
+      ...projectCalendarItems,
+      ...monthlyClassItems,
+    ];
+  }, [monthlyClassItems, projectCalendarItems]);
 
-  const selectedProjectItems = useMemo(() => {
-    return projectItems.filter(
+  const selectedEvents = useMemo(() => {
+    return projectCalendarItems.filter(
       (item) => item.date === selectedDate
     );
-  }, [projectItems, selectedDate]);
+  }, [projectCalendarItems, selectedDate]);
 
   const selectedClasses = useMemo(() => {
-    return classItems.filter(
+    return monthlyClassItems.filter(
       (item) => item.date === selectedDate
     );
-  }, [classItems, selectedDate]);
+  }, [monthlyClassItems, selectedDate]);
+
+  const selectedAgendaItems = useMemo(() => {
+    return [...selectedEvents, ...selectedClasses].sort(
+      (first, second) => {
+        const firstTime = first.time || "23:59";
+        const secondTime = second.time || "23:59";
+
+        return firstTime.localeCompare(secondTime);
+      }
+    );
+  }, [selectedClasses, selectedEvents]);
+
+  const deadlineCount = selectedEvents.filter(
+    (item) => item.type === "deadline"
+  ).length;
+
+  const updateCount = selectedEvents.filter(
+    (item) => item.type === "update"
+  ).length;
+
+  const classCount = selectedClasses.length;
 
   const markedDates = useMemo(() => {
     const result: Record<string, any> = {};
 
-    allMarkedItems.forEach((item) => {
+    allCalendarItems.forEach((item) => {
       if (!result[item.date]) {
         result[item.date] = {
           dots: [],
@@ -440,15 +547,15 @@ export default function CalendarScreen() {
       }
 
       const color = getItemColor(item.type);
-      const dotKey = `${item.type}-${color}`;
+      const key = `${item.type}-${color}`;
 
-      const alreadyExists = result[item.date].dots.some(
-        (dot: { key: string }) => dot.key === dotKey
+      const alreadyAdded = result[item.date].dots.some(
+        (dot: { key: string }) => dot.key === key
       );
 
-      if (!alreadyExists) {
+      if (!alreadyAdded) {
         result[item.date].dots.push({
-          key: dotKey,
+          key,
           color,
           selectedDotColor: "#FFFFFF",
         });
@@ -464,10 +571,7 @@ export default function CalendarScreen() {
     };
 
     return result;
-  }, [allMarkedItems, selectedDate]);
-
-  const totalSelectedItems =
-    selectedProjectItems.length + selectedClasses.length;
+  }, [allCalendarItems, selectedDate]);
 
   const userName =
     user?.name ||
@@ -477,7 +581,10 @@ export default function CalendarScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.blue} />
+        <ActivityIndicator
+          size="large"
+          color={COLORS.blue}
+        />
 
         <Text style={styles.loadingText}>
           Loading your calendar...
@@ -489,12 +596,16 @@ export default function CalendarScreen() {
   return (
     <ScrollView
       style={styles.screen}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        isWideScreen && styles.wideContent,
+      ]}
       showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
           tintColor={COLORS.blue}
+          colors={[COLORS.blue]}
           onRefresh={() => {
             setRefreshing(true);
             loadProjects();
@@ -513,23 +624,27 @@ export default function CalendarScreen() {
           </Text>
 
           <Text style={styles.pageSubtitle}>
-            Projects, updates and classes in one place.
+            Keep projects, progress updates and classes
+            together in one organized schedule.
           </Text>
         </View>
 
         <View style={styles.profileCircle}>
           <Text style={styles.profileText}>
-            {buildInitials(userName)}
+            {getInitials(userName)}
           </Text>
         </View>
       </View>
 
       <View style={styles.phoneCard}>
         <View style={styles.calendarHeader}>
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity
+            style={styles.iconButton}
+            activeOpacity={0.7}
+          >
             <Ionicons
               name="menu-outline"
-              size={24}
+              size={25}
               color={COLORS.text}
             />
           </TouchableOpacity>
@@ -538,7 +653,10 @@ export default function CalendarScreen() {
             {formatMonthYear(visibleMonth)}
           </Text>
 
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity
+            style={styles.iconButton}
+            activeOpacity={0.7}
+          >
             <Ionicons
               name="ellipsis-vertical"
               size={22}
@@ -551,16 +669,16 @@ export default function CalendarScreen() {
           current={visibleMonth}
           markingType="multi-dot"
           markedDates={markedDates}
+          enableSwipeMonths
+          hideArrows
+          hideExtraDays={false}
+          firstDay={0}
           onDayPress={(day: DateData) => {
             setSelectedDate(day.dateString);
           }}
           onMonthChange={(month: DateData) => {
             setVisibleMonth(month.dateString);
           }}
-          enableSwipeMonths
-          hideArrows
-          hideExtraDays={false}
-          firstDay={0}
           style={styles.calendar}
           theme={{
             backgroundColor: COLORS.card,
@@ -573,10 +691,10 @@ export default function CalendarScreen() {
             selectedDayTextColor: "#FFFFFF",
 
             todayTextColor: COLORS.blue,
-            todayBackgroundColor: COLORS.blueLight,
+            todayBackgroundColor: COLORS.blueSoft,
 
             dayTextColor: COLORS.text,
-            textDisabledColor: "#D6D6E0",
+            textDisabledColor: "#D4D4DF",
 
             dotColor: COLORS.cyan,
             selectedDotColor: "#FFFFFF",
@@ -596,50 +714,7 @@ export default function CalendarScreen() {
 
         <View style={styles.divider} />
 
-        <View style={styles.dateSummary}>
-          <View style={styles.countGroup}>
-            <View style={styles.blueCount}>
-              <Text style={styles.blueCountText}>
-                {totalSelectedItems}
-              </Text>
-            </View>
-
-            <View style={styles.summaryPill}>
-              <Text style={styles.summaryPillText}>
-                Your schedule
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.selectedDateGroup}>
-            <Ionicons
-              name="calendar-outline"
-              size={18}
-              color={COLORS.text}
-            />
-
-            <Text style={styles.selectedDateText}>
-              {formatSelectedDate(selectedDate)}
-            </Text>
-          </View>
-        </View>
-
-        <ScheduleSection
-          title="Your events"
-          count={selectedProjectItems.length}
-          items={selectedProjectItems}
-          emptyMessage="No project events for this day."
-        />
-
-        <ScheduleSection
-          title="Your classes"
-          count={selectedClasses.length}
-          items={selectedClasses}
-          emptyMessage="No classes scheduled for this day."
-        />
-      </View>
-
-      <View style={styles.legendCard}>
+                <View style={styles.legendCard}>
         <LegendItem
           color={COLORS.cyan}
           label="Project deadline"
@@ -655,100 +730,298 @@ export default function CalendarScreen() {
           label="Class"
         />
       </View>
+        <View style={styles.agendaHeader}>
+          <View>
+            <Text style={styles.agendaEyebrow}>
+              DAILY AGENDA
+            </Text>
+
+            <Text style={styles.agendaDate}>
+              {formatSelectedDate(selectedDate)}
+            </Text>
+          </View>
+
+          <View style={styles.totalBadge}>
+            <Text style={styles.totalBadgeNumber}>
+              {selectedAgendaItems.length}
+            </Text>
+
+            <Text style={styles.totalBadgeLabel}>
+              {selectedAgendaItems.length === 1
+                ? "item"
+                : "items"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.agendaStats}>
+          <AgendaStat
+            icon="flag-outline"
+            label="Deadlines"
+            value={deadlineCount}
+            color={COLORS.cyan}
+          />
+
+          <AgendaStat
+            icon="checkmark-circle-outline"
+            label="Updates"
+            value={updateCount}
+            color={COLORS.green}
+          />
+
+          <AgendaStat
+            icon="school-outline"
+            label="Classes"
+            value={classCount}
+            color={COLORS.orange}
+          />
+        </View>
+
+        {selectedAgendaItems.length === 0 ? (
+          <View style={styles.emptyAgenda}>
+            <View style={styles.emptyAgendaIcon}>
+              <Ionicons
+                name="calendar-clear-outline"
+                size={31}
+                color={COLORS.faint}
+              />
+            </View>
+
+            <Text style={styles.emptyAgendaTitle}>
+              Your day is clear
+            </Text>
+
+            <Text style={styles.emptyAgendaText}>
+              There are no classes, project updates or
+              deadlines scheduled for this date.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.timelineCard}>
+            {selectedAgendaItems.map((item, index) => (
+              <AgendaItem
+                key={item.id}
+                item={item}
+                isLast={
+                  index === selectedAgendaItems.length - 1
+                }
+              />
+            ))}
+          </View>
+        )}
+      </View>
+
+
+
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryIcon}>
+          <Ionicons
+            name="calendar-outline"
+            size={24}
+            color={COLORS.blue}
+          />
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <Text style={styles.summaryTitle}>
+            Calendar overview
+          </Text>
+
+          <Text style={styles.summaryText}>
+            {visibleProjects.length} project
+            {visibleProjects.length === 1 ? "" : "s"},{" "}
+            {projectCalendarItems.length} calendar event
+            {projectCalendarItems.length === 1
+              ? ""
+              : "s"}{" "}
+            and {monthlyClassItems.length} recurring class
+            {monthlyClassItems.length === 1 ? "" : "es"}{" "}
+            are currently available.
+          </Text>
+        </View>
+      </View>
 
       <View style={{ height: 120 }} />
     </ScrollView>
   );
 }
 
-function ScheduleSection({
-  title,
-  count,
-  items,
-  emptyMessage,
+function AgendaStat({
+  icon,
+  label,
+  value,
+  color,
 }: {
-  title: string;
-  count: number;
-  items: CalendarItem[];
-  emptyMessage: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: number;
+  color: string;
 }) {
   return (
-    <View style={styles.scheduleSection}>
-      <View style={styles.sectionHeading}>
-        <View style={styles.sectionCount}>
-          <Text style={styles.sectionCountText}>{count}</Text>
+    <View style={styles.agendaStat}>
+      <View
+        style={[
+          styles.agendaStatIcon,
+          {
+            backgroundColor: `${color}18`,
+          },
+        ]}
+      >
+        <Ionicons
+          name={icon}
+          size={18}
+          color={color}
+        />
+      </View>
+
+      <Text style={styles.agendaStatValue}>
+        {value}
+      </Text>
+
+      <Text style={styles.agendaStatLabel}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function AgendaItem({
+  item,
+  isLast,
+}: {
+  item: CalendarItem;
+  isLast: boolean;
+}) {
+  const color = getItemColor(item.type);
+
+  const typeLabel =
+    item.type === "deadline"
+      ? "Project deadline"
+      : item.type === "update"
+        ? "Progress update"
+        : item.type === "meeting"
+          ? "Meeting"
+          : "Class";
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.timelineItem,
+        isLast && styles.timelineItemLast,
+      ]}
+      activeOpacity={item.projectId ? 0.75 : 1}
+      onPress={() => {
+        if (item.projectId) {
+          router.push(`/project/${item.projectId}`);
+        }
+      }}
+    >
+      <View style={styles.timelineLeft}>
+        <View
+          style={[
+            styles.timelineDot,
+            {
+              backgroundColor: color,
+            },
+          ]}
+        />
+
+        {!isLast && <View style={styles.timelineLine} />}
+      </View>
+
+      <View style={styles.timelineContent}>
+        <View style={styles.timelineTop}>
+          <Text
+            style={[
+              styles.timelineType,
+              {
+                color,
+              },
+            ]}
+          >
+            {typeLabel}
+          </Text>
+
+          {item.time && (
+            <Text style={styles.timelineTime}>
+              {item.time}
+            </Text>
+          )}
         </View>
 
-        <View style={styles.sectionTitlePill}>
-          <Text style={styles.sectionTitleText}>{title}</Text>
+        <Text style={styles.timelineTitle}>
+          {item.title}
+        </Text>
+
+        <Text style={styles.timelineSubtitle}>
+          {item.subtitle}
+        </Text>
+
+        <View style={styles.timelineMetaRow}>
+          {item.location && (
+            <MetaPill
+              icon="location-outline"
+              text={item.location}
+            />
+          )}
+
+          {item.professor && (
+            <MetaPill
+              icon="person-outline"
+              text={item.professor}
+            />
+          )}
+
+          {item.studentName && (
+            <MetaPill
+              icon="school-outline"
+              text={item.studentName}
+            />
+          )}
+
+          {typeof item.progress === "number" && (
+            <MetaPill
+              icon="analytics-outline"
+              text={`${item.progress}%`}
+            />
+          )}
         </View>
       </View>
 
-      {items.length === 0 ? (
-        <View style={styles.emptyRow}>
+      {item.projectId && (
+        <View style={styles.openButton}>
           <Ionicons
-            name="calendar-clear-outline"
-            size={21}
-            color={COLORS.faint}
+            name="chevron-forward"
+            size={18}
+            color={COLORS.blue}
           />
-
-          <Text style={styles.emptyText}>
-            {emptyMessage}
-          </Text>
         </View>
-      ) : (
-        items.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={styles.scheduleItem}
-            activeOpacity={item.projectId ? 0.75 : 1}
-            onPress={() => {
-              if (item.projectId) {
-                router.push(`/project/${item.projectId}`);
-              }
-            }}
-          >
-            <View
-              style={[
-                styles.scheduleCircle,
-                {
-                  borderColor: getItemColor(item.type),
-                },
-              ]}
-            />
-
-            <View style={styles.scheduleContent}>
-              {item.time ? (
-                <Text style={styles.scheduleTime}>
-                  {item.time}
-                </Text>
-              ) : (
-                <Text style={styles.scheduleSubject}>
-                  {item.type === "deadline"
-                    ? "Project deadline"
-                    : "Project update"}
-                </Text>
-              )}
-
-              <Text style={styles.scheduleTitle}>
-                {item.title}
-              </Text>
-
-              <Text style={styles.scheduleSubtitle}>
-                {item.subtitle}
-              </Text>
-            </View>
-
-            {item.projectId && (
-              <Ionicons
-                name="ellipsis-vertical"
-                size={20}
-                color={COLORS.muted}
-              />
-            )}
-          </TouchableOpacity>
-        ))
       )}
+    </TouchableOpacity>
+  );
+}
+
+function MetaPill({
+  icon,
+  text,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  text: string;
+}) {
+  return (
+    <View style={styles.metaPill}>
+      <Ionicons
+        name={icon}
+        size={13}
+        color="#74748A"
+      />
+
+      <Text
+        style={styles.metaText}
+        numberOfLines={1}
+      >
+        {text}
+      </Text>
     </View>
   );
 }
@@ -771,82 +1044,11 @@ function LegendItem({
         ]}
       />
 
-      <Text style={styles.legendText}>{label}</Text>
+      <Text style={styles.legendText}>
+        {label}
+      </Text>
     </View>
   );
-}
-
-function convertTimestampToDate(
-  timestamp?: string
-): string | null {
-  if (!timestamp) return null;
-
-  /*
-    Already formatted as YYYY-MM-DD
-  */
-  const isoMatch = timestamp.match(
-    /^\d{4}-\d{2}-\d{2}/
-  );
-
-  if (isoMatch) {
-    return isoMatch[0];
-  }
-
-  /*
-    Handles timestamps such as:
-    7/13/2026 10:30:00
-    13/07/2026 10:30:00
-  */
-  const parts = timestamp
-    .split(/[,\s]+/)[0]
-    .split(/[/-]/);
-
-  if (parts.length === 3) {
-    const first = Number(parts[0]);
-    const second = Number(parts[1]);
-    const year = Number(parts[2]);
-
-    let month: number;
-    let day: number;
-
-    if (first > 12) {
-      day = first;
-      month = second;
-    } else {
-      month = first;
-      day = second;
-    }
-
-    if (
-      Number.isFinite(year) &&
-      Number.isFinite(month) &&
-      Number.isFinite(day)
-    ) {
-      return `${year}-${String(month).padStart(
-        2,
-        "0"
-      )}-${String(day).padStart(2, "0")}`;
-    }
-  }
-
-  const parsed = new Date(timestamp);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  return formatDateObject(parsed);
-}
-
-function formatDateObject(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(
-    2,
-    "0"
-  );
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
 }
 
 const styles = StyleSheet.create({
@@ -858,6 +1060,12 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 18,
     paddingTop: 28,
+  },
+
+  wideContent: {
+    width: "100%",
+    maxWidth: 900,
+    alignSelf: "center",
   },
 
   loadingContainer: {
@@ -893,6 +1101,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     marginTop: 11,
+    maxWidth: 340,
   },
 
   profileCircle: {
@@ -963,166 +1172,245 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  dateSummary: {
+  agendaHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 4,
-    paddingVertical: 18,
-  },
-
-  countGroup: {
-    flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: 9,
+    marginTop: 20,
+    marginBottom: 16,
   },
 
-  blueCount: {
-    width: 47,
-    height: 47,
-    borderRadius: 24,
-    backgroundColor: COLORS.blue,
-    justifyContent: "center",
+  agendaEyebrow: {
+    color: COLORS.blue,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+    marginBottom: 5,
+  },
+
+  agendaDate: {
+    color: COLORS.text,
+    fontSize: 21,
+    fontWeight: "900",
+  },
+
+  totalBadge: {
+    minWidth: 64,
+    backgroundColor: COLORS.blueSoft,
+    borderRadius: 20,
     alignItems: "center",
-    zIndex: 2,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
 
-  blueCountText: {
-    color: "#FFFFFF",
+  totalBadgeNumber: {
+    color: COLORS.blue,
     fontSize: 18,
     fontWeight: "900",
   },
 
-  summaryPill: {
-    marginLeft: -10,
-    backgroundColor: "#F0F0F6",
-    paddingLeft: 20,
-    paddingRight: 15,
-    paddingVertical: 11,
-    borderRadius: 20,
+  totalBadgeLabel: {
+    color: "#5D7DA4",
+    fontSize: 10,
+    fontWeight: "800",
   },
 
-  summaryPillText: {
-    color: COLORS.text,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-
-  selectedDateGroup: {
+  agendaStats: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-
-  selectedDateText: {
-    color: COLORS.text,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-
-  scheduleSection: {
+    gap: 10,
+    marginBottom: 18,
     paddingHorizontal: 8,
-    marginBottom: 20,
   },
 
-  sectionHeading: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
+  agendaStat: {
+    flex: 1,
+    backgroundColor: "#F8F8FC",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    padding: 12,
   },
 
-  sectionCount: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: COLORS.blue,
+  agendaStatIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 2,
+    marginBottom: 9,
   },
 
-  sectionCountText: {
-    color: "#FFFFFF",
-    fontSize: 18,
+  agendaStatValue: {
+    color: COLORS.text,
+    fontSize: 20,
     fontWeight: "900",
   },
 
-  sectionTitlePill: {
-    marginLeft: -9,
-    backgroundColor: "#F0F0F6",
-    paddingLeft: 20,
-    paddingRight: 17,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-
-  sectionTitleText: {
-    color: COLORS.text,
-    fontSize: 14,
+  agendaStatLabel: {
+    color: COLORS.muted,
+    fontSize: 11,
     fontWeight: "700",
+    marginTop: 2,
   },
 
-  scheduleItem: {
+  timelineCard: {
+    marginHorizontal: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 22,
+    paddingHorizontal: 15,
+    marginBottom: 6,
+  },
+
+  timelineItem: {
     flexDirection: "row",
+    alignItems: "stretch",
+    paddingVertical: 17,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F5",
+  },
+
+  timelineItemLast: {
+    borderBottomWidth: 0,
+  },
+
+  timelineLeft: {
+    width: 24,
     alignItems: "center",
-    paddingVertical: 13,
-    paddingHorizontal: 6,
+    marginRight: 10,
   },
 
-  scheduleCircle: {
-    width: 25,
-    height: 25,
-    borderRadius: 13,
-    borderWidth: 2,
-    marginRight: 15,
+  timelineDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginTop: 5,
+    zIndex: 2,
   },
 
-  scheduleContent: {
+  timelineLine: {
+    position: "absolute",
+    top: 17,
+    bottom: -18,
+    width: 2,
+    backgroundColor: "#E5E7EB",
+  },
+
+  timelineContent: {
     flex: 1,
   },
 
-  scheduleSubject: {
-    color: COLORS.muted,
-    fontSize: 12,
-    marginBottom: 3,
+  timelineTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
   },
 
-  scheduleTime: {
-    color: COLORS.muted,
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 4,
+  timelineType: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
 
-  scheduleTitle: {
-    color: COLORS.text,
-    fontSize: 17,
-    lineHeight: 23,
+  timelineTime: {
+    color: COLORS.muted,
+    fontSize: 11,
     fontWeight: "700",
   },
 
-  scheduleSubtitle: {
+  timelineTitle: {
+    color: COLORS.text,
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: "900",
+  },
+
+  timelineSubtitle: {
     color: COLORS.muted,
     fontSize: 12,
     lineHeight: 18,
-    marginTop: 3,
+    marginTop: 4,
   },
 
-  emptyRow: {
+  timelineMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+    marginTop: 10,
+  },
+
+  metaPill: {
+    maxWidth: "100%",
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 4,
+    backgroundColor: "#F3F3F8",
+    borderRadius: 12,
     paddingHorizontal: 8,
-    paddingVertical: 18,
+    paddingVertical: 5,
   },
 
-  emptyText: {
+  metaText: {
+    color: "#74748A",
+    fontSize: 10,
+    fontWeight: "700",
+    maxWidth: 150,
+  },
+
+  openButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: COLORS.blueSoft,
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "center",
+    marginLeft: 8,
+  },
+
+  emptyAgenda: {
+    marginHorizontal: 8,
+    backgroundColor: "#F8F8FC",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 22,
+    padding: 28,
+    alignItems: "center",
+    marginBottom: 6,
+  },
+
+  emptyAgendaIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+
+  emptyAgendaTitle: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+
+  emptyAgendaText: {
     color: COLORS.muted,
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 19,
+    textAlign: "center",
+    marginTop: 6,
+    maxWidth: 280,
   },
 
   legendCard: {
     marginTop: 18,
-    backgroundColor: "rgba(255,255,255,0.72)",
+    backgroundColor: "rgba(255,255,255,0.78)",
     borderRadius: 22,
     padding: 16,
     flexDirection: "row",
@@ -1146,5 +1434,37 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 12,
     fontWeight: "700",
+  },
+
+  summaryCard: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    backgroundColor: "rgba(255,255,255,0.78)",
+    borderRadius: 22,
+    padding: 17,
+  },
+
+  summaryIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 15,
+    backgroundColor: COLORS.blueSoft,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  summaryTitle: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  summaryText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
   },
 });
