@@ -19,6 +19,21 @@ type ProjectWithStatus = Project & {
   status: "Completed" | "On Track" | "Review" | "Attention";
 };
 
+type ActivityType =
+  | "submission"
+  | "progress"
+  | "comment"
+  | "deadline";
+
+type ActivityData = {
+  id: string;
+  type: ActivityType;
+  title: string;
+  description: string;
+  date: string;
+  projectId?: string;
+};
+
 const C = {
   bg: "#F4F5FB",
   card: "#FFFFFF",
@@ -61,6 +76,79 @@ function getDaysLeft(date: string) {
   const due = new Date(date);
   const diff = due.getTime() - now.getTime();
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+
+
+function getActivityIcon(
+  type: ActivityType,
+): keyof typeof Ionicons.glyphMap {
+  switch (type) {
+    case "submission":
+      return "cloud-upload-outline";
+    case "progress":
+      return "trending-up-outline";
+    case "comment":
+      return "chatbubble-ellipses-outline";
+    case "deadline":
+      return "alarm-outline";
+    default:
+      return "notifications-outline";
+  }
+}
+
+function getActivityColor(type: ActivityType) {
+  switch (type) {
+    case "submission":
+      return C.primary;
+    case "progress":
+      return C.success;
+    case "comment":
+      return C.purple;
+    case "deadline":
+      return C.warning;
+    default:
+      return C.muted;
+  }
+}
+
+function getActivityBackground(type: ActivityType) {
+  switch (type) {
+    case "submission":
+      return C.primaryLight;
+    case "progress":
+      return C.successLight;
+    case "comment":
+      return C.purpleLight;
+    case "deadline":
+      return C.warningLight;
+    default:
+      return C.soft;
+  }
+}
+
+function formatActivityTime(dateString?: string) {
+  if (!dateString) return "Recently";
+
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return dateString;
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function formatDay(date: string) {
@@ -110,6 +198,136 @@ export default function HomeScreen() {
       })),
     [projects],
   );
+
+
+
+  const activities = useMemo<ActivityData[]>(() => {
+    const generated: ActivityData[] = [];
+
+    enhancedProjects.forEach((project) => {
+      const projectAny = project as ProjectWithStatus & {
+        updates?: Array<{
+          id?: string;
+          timestamp?: string;
+          studentName?: string;
+          progress?: number;
+          updateDetails?: string;
+        }>;
+        teacherComment?: string;
+        teacherCommentDate?: string;
+        professorComment?: string;
+        commentDate?: string;
+      };
+
+      const updates = Array.isArray(projectAny.updates)
+        ? projectAny.updates
+        : [];
+
+      if (updates.length > 0) {
+        const latestUpdate = updates[updates.length - 1];
+
+        generated.push({
+          id: `submission-${project.id}-${
+            latestUpdate.id || updates.length
+          }`,
+          type: "submission",
+          title: "New submission received",
+          description: `${
+            latestUpdate.studentName ||
+            project.studentName ||
+            "A student"
+          } submitted an update for ${project.title}.`,
+          date: latestUpdate.timestamp || project.timestamp || "",
+          projectId: project.id,
+        });
+
+        generated.push({
+          id: `progress-${project.id}-${
+            latestUpdate.id || updates.length
+          }`,
+          type: "progress",
+          title: "Progress updated",
+          description: `${project.title} is now ${
+            latestUpdate.progress ?? project.progress
+          }% complete.`,
+          date: latestUpdate.timestamp || project.timestamp || "",
+          projectId: project.id,
+        });
+      } else if (project.timestamp) {
+        generated.push({
+          id: `submission-${project.id}`,
+          type: "submission",
+          title: "New submission received",
+          description: `${
+            project.studentName || "A student"
+          } submitted an update for ${project.title}.`,
+          date: project.timestamp,
+          projectId: project.id,
+        });
+
+        generated.push({
+          id: `progress-${project.id}`,
+          type: "progress",
+          title: "Progress updated",
+          description: `${project.title} is now ${project.progress}% complete.`,
+          date: project.timestamp,
+          projectId: project.id,
+        });
+      }
+
+      const teacherComment =
+        projectAny.teacherComment || projectAny.professorComment || "";
+      const teacherCommentDate =
+        projectAny.teacherCommentDate ||
+        projectAny.commentDate ||
+        project.timestamp ||
+        "";
+
+      if (teacherComment) {
+        generated.push({
+          id: `comment-${project.id}`,
+          type: "comment",
+          title: "Teacher comment added",
+          description: teacherComment,
+          date: teacherCommentDate,
+          projectId: project.id,
+        });
+      }
+
+      const daysLeft = getDaysLeft(project.dueDate);
+
+      if (daysLeft >= 0 && daysLeft <= 7) {
+        generated.push({
+          id: `deadline-${project.id}`,
+          type: "deadline",
+          title: "Deadline reminder",
+          description:
+            daysLeft === 0
+              ? `${project.title} is due today.`
+              : `${project.title} is due in ${daysLeft} day${
+                  daysLeft === 1 ? "" : "s"
+                }.`,
+          date: project.dueDate,
+          projectId: project.id,
+        });
+      }
+    });
+
+    return generated
+      .sort((first, second) => {
+        const firstTime = new Date(first.date).getTime();
+        const secondTime = new Date(second.date).getTime();
+
+        if (Number.isNaN(firstTime) && Number.isNaN(secondTime)) return 0;
+        if (Number.isNaN(firstTime)) return 1;
+        if (Number.isNaN(secondTime)) return -1;
+
+        return secondTime - firstTime;
+      })
+      .slice(0, 8);
+  }, [enhancedProjects]);
+
+  const unreadActivityCount = activities.length;
 
   const totalProjects = enhancedProjects.length;
 
@@ -394,6 +612,59 @@ export default function HomeScreen() {
           ) : null}
         </View>
 
+
+
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionEyebrow}>LIVE ACTIVITY</Text>
+            <Text style={styles.sectionTitle}>Recent activities</Text>
+          </View>
+
+          <View style={styles.activityHeaderActions}>
+            <View style={styles.activityUnreadBadge}>
+              <Ionicons
+                name="notifications-outline"
+                size={15}
+                color={C.primaryDark}
+              />
+              <Text style={styles.activityUnreadText}>
+                {unreadActivityCount}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {activities.length === 0 ? (
+          <View style={styles.emptyActivityCard}>
+            <View style={styles.emptyActivityIcon}>
+              <Ionicons
+                name="notifications-off-outline"
+                size={27}
+                color={C.muted}
+              />
+            </View>
+
+            <Text style={styles.emptyActivityTitle}>
+              No recent activity
+            </Text>
+
+            <Text style={styles.emptyActivityText}>
+              New submissions, progress updates, teacher comments and
+              deadline reminders will appear here.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.activitiesCard}>
+            {activities.map((activity, index) => (
+              <ActivityRow
+                key={activity.id}
+                activity={activity}
+                isLast={index === activities.length - 1}
+              />
+            ))}
+          </View>
+        )}
+
         <View style={styles.sectionHeader}>
           <View>
             <Text style={styles.sectionEyebrow}>UPCOMING</Text>
@@ -570,6 +841,73 @@ export default function HomeScreen() {
         <View style={{ height: 120 }} />
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+
+function ActivityRow({
+  activity,
+  isLast,
+}: {
+  activity: ActivityData;
+  isLast: boolean;
+}) {
+  const color = getActivityColor(activity.type);
+  const background = getActivityBackground(activity.type);
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.activityRow,
+        isLast && styles.activityRowLast,
+      ]}
+      activeOpacity={activity.projectId ? 0.78 : 1}
+      onPress={() => {
+        if (activity.projectId) {
+          router.push(`/project/${activity.projectId}`);
+        }
+      }}
+    >
+      <View
+        style={[
+          styles.activityIconBox,
+          { backgroundColor: background },
+        ]}
+      >
+        <Ionicons
+          name={getActivityIcon(activity.type)}
+          size={20}
+          color={color}
+        />
+      </View>
+
+      <View style={styles.activityContent}>
+        <View style={styles.activityTitleRow}>
+          <Text style={styles.activityTitle} numberOfLines={1}>
+            {activity.title}
+          </Text>
+
+          <Text style={styles.activityTime}>
+            {formatActivityTime(activity.date)}
+          </Text>
+        </View>
+
+        <Text
+          style={styles.activityDescription}
+          numberOfLines={2}
+        >
+          {activity.description}
+        </Text>
+      </View>
+
+      {activity.projectId ? (
+        <Ionicons
+          name="chevron-forward-outline"
+          size={18}
+          color={C.muted}
+        />
+      ) : null}
+    </TouchableOpacity>
   );
 }
 
@@ -1038,6 +1376,131 @@ const styles = StyleSheet.create({
     color: C.primaryDark,
     fontWeight: "900",
     fontSize: 12,
+  },
+
+
+  activityHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  activityUnreadBadge: {
+    minWidth: 42,
+    height: 36,
+    borderRadius: 13,
+    backgroundColor: C.primaryLight,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+  },
+
+  activityUnreadText: {
+    color: C.primaryDark,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  activitiesCard: {
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 23,
+    paddingHorizontal: 16,
+    marginBottom: 24,
+    shadowColor: "#1D2939",
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    elevation: 2,
+  },
+
+  activityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: C.divider,
+  },
+
+  activityRowLast: {
+    borderBottomWidth: 0,
+  },
+
+  activityIconBox: {
+    width: 43,
+    height: 43,
+    borderRadius: 15,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  activityContent: {
+    flex: 1,
+  },
+
+  activityTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+
+  activityTitle: {
+    flex: 1,
+    color: C.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  activityTime: {
+    color: C.muted,
+    fontSize: 9,
+    fontWeight: "700",
+  },
+
+  activityDescription: {
+    color: C.secondary,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 4,
+  },
+
+  emptyActivityCard: {
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 23,
+    padding: 25,
+    alignItems: "center",
+    marginBottom: 24,
+  },
+
+  emptyActivityIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 19,
+    backgroundColor: C.soft,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  emptyActivityTitle: {
+    color: C.text,
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 12,
+  },
+
+  emptyActivityText: {
+    color: C.secondary,
+    fontSize: 11,
+    lineHeight: 18,
+    textAlign: "center",
+    marginTop: 6,
+    maxWidth: 290,
   },
 
   timelineCard: {

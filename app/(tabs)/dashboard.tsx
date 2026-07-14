@@ -184,9 +184,12 @@ function StudentView({
           <Text style={styles.role}>CSE Student</Text>
         </View>
 
-        <TouchableOpacity style={styles.avatar} onPress={logout}>
-          <Text style={styles.avatarText}>{initials}</Text>
-        </TouchableOpacity>
+   <TouchableOpacity
+  style={styles.avatar}
+  onPress={() => router.push("/profile")}
+>
+  <Text style={styles.avatarText}>{initials}</Text>
+</TouchableOpacity>
       </View>
 
       <View style={styles.heroCard}>
