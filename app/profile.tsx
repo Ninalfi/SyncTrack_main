@@ -4,8 +4,10 @@ import * as DocumentPicker from "expo-document-picker";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Linking,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -57,6 +59,7 @@ export default function ProfileScreen() {
   const isTeacher = user?.role === "professor";
   const [documents, setDocuments] = useState<ProfileDocument[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const storageKey = isTeacher ? TEACHER_DOCS_KEY : STUDENT_DOCS_KEY;
 
@@ -206,7 +209,45 @@ export default function ProfileScreen() {
     await saveDocuments(updated);
   }
 
+  async function performLogout() {
+    if (loggingOut) return;
+
+    try {
+      setLoggingOut(true);
+      await logout();
+    } catch (error) {
+      console.log("Profile logout error:", error);
+
+      if (Platform.OS === "web") {
+        window.alert(
+          "Your session was cleared. Refresh the page if the login screen does not appear."
+        );
+      } else {
+        Alert.alert(
+          "Logout issue",
+          "Your session was cleared. Reopen the app if the login screen does not appear."
+        );
+      }
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+
   function confirmLogout() {
+    if (loggingOut) return;
+
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(
+        "Are you sure you want to log out?"
+      );
+
+      if (confirmed) {
+        void performLogout();
+      }
+
+      return;
+    }
+
     Alert.alert(
       "Logout",
       "Are you sure you want to log out?",
@@ -215,9 +256,8 @@ export default function ProfileScreen() {
         {
           text: "Logout",
           style: "destructive",
-          onPress: async () => {
-            await logout();
-            router.replace("/login");
+          onPress: () => {
+            void performLogout();
           },
         },
       ]
@@ -465,12 +505,26 @@ export default function ProfileScreen() {
         </View>
 
         <TouchableOpacity
-          style={styles.logoutButton}
+          style={[
+            styles.logoutButton,
+            loggingOut && styles.disabledButton,
+          ]}
           onPress={confirmLogout}
+          disabled={loggingOut}
           activeOpacity={0.86}
         >
-          <Ionicons name="log-out-outline" size={20} color={C.white} />
-          <Text style={styles.logoutText}>Logout</Text>
+          {loggingOut ? (
+            <ActivityIndicator color={C.white} />
+          ) : (
+            <>
+              <Ionicons
+                name="log-out-outline"
+                size={20}
+                color={C.white}
+              />
+              <Text style={styles.logoutText}>Logout</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         <View style={{ height: 70 }} />

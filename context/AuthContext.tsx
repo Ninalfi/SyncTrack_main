@@ -6,12 +6,22 @@ import {
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
+import { signOut } from "firebase/auth";
+
+import { auth } from "../services/firebase";
 
 type User = {
   uid: string;
   email: string | null;
-  name?: string;
+  name: string;
   role: "student" | "professor";
+  department: string;
+  studentId?: string;
+  semester?: string;
+  batch?: string;
+  designation?: string;
+  employeeId?: string;
+  program?: string;
 };
 
 type AuthContextType = {
@@ -32,7 +42,7 @@ export function AuthProvider({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    checkAuth();
+    void checkAuth();
   }, []);
 
   async function checkAuth() {
@@ -41,9 +51,13 @@ export function AuthProvider({
 
       if (savedUser) {
         setUser(JSON.parse(savedUser));
+      } else {
+        setUser(null);
       }
     } catch (error) {
       console.log("Auth check error:", error);
+      await AsyncStorage.removeItem("user");
+      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -55,7 +69,18 @@ export function AuthProvider({
   }
 
   async function logout() {
-    await AsyncStorage.removeItem("user");
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.log("Firebase sign-out error:", error);
+    }
+
+    try {
+      await AsyncStorage.removeItem("user");
+    } catch (error) {
+      console.log("Local session removal error:", error);
+    }
+
     setUser(null);
     router.replace("/auth");
   }
